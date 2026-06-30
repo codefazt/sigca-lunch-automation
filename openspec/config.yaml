@@ -1,0 +1,37 @@
+# OpenSpec Configuration File
+# Gentleman AI Stack - Spec-Driven Development (SDD)
+
+schema: spec-driven
+version: 1.0.0
+
+project:
+  name: "Solicitud Automática de Almuerzo"
+  description: "Automatización diaria para pedir almuerzo en la plataforma SiGCA y programarla como un Job en Windows 11."
+  context: |
+    - Sitio web a automatizar: https://sigca.ex-cle.com/ (Aplicación SPA en Angular).
+    - Lenguaje y librerías principales: Python 3.10+, Playwright (para interacción segura y robusta con Angular).
+    - Planificación de ejecución: Tareas Programadas de Windows 11 (Task Scheduler).
+    - Horario hábil de pedido: configurable de 4:00 PM a 9:59 PM (según restricciones del servidor de SiGCA).
+    - Enfoque de Seguridad: Las credenciales y configuraciones sensibles se leen de un archivo `.env` o `config.json` externo no trackeado por Git.
+
+rules:
+  proposal:
+    - Definir claramente el alcance del job.
+    - Documentar planes de rollback y contingencias (por ejemplo, si el sitio está caído).
+  specs:
+    - Utilizar formato BDD (Given/When/Then) para describir los flujos de login, navegación, selección y confirmación de almuerzo.
+    - Definir escenarios de error (credenciales incorrectas, sitio fuera de horario, almuerzo ya solicitado).
+  design:
+    - Diseñar el script de Python utilizando el patrón Page Object Model (POM) o modular estructurado para Playwright.
+    - Diseñar el mecanismo de logs detallados y notificaciones en caso de falla.
+    - Diseñar el script de Windows PowerShell/Batch que invoca la ejecución.
+  tasks:
+    - Dividir el desarrollo en tareas pequeñas que puedan ser implementadas paso a paso con TDD.
+  apply:
+    - Seguir Strict TDD mode: escribir primero los tests mockeados y de integración.
+    - Los selectores de Playwright deben usar IDs estáticos, selectores de texto o roles de accesibilidad para ser robustos frente a actualizaciones de Angular.
+  verify:
+    - Ejecutar la suite de pruebas automatizadas y guardar evidencia de éxito.
+    - Verificar la correcta programación del job en el programador de tareas de Windows.
+  archive:
+    - Documentar la lección aprendida y consolidar el histórico de cambios en `openspec/archive/`.

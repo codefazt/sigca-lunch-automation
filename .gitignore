@@ -1,0 +1,29 @@
+# Virtual environments
+venv/
+ENV/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# User secrets
+.env
+
+# Logs and evidence (keep directories, ignore contents)
+logs/*
+!logs/.gitkeep
+evidence/*
+!evidence/.gitkeep
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
