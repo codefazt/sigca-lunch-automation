@@ -29,6 +29,13 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
 - Script de compilación `build.bat` que empaqueta todo el entorno, dependencias de Python y assets estáticos en un archivo ejecutable autónomo (`SiGCABot.exe`) mediante PyInstaller.
 - Configuración y registro automático de la Tarea Programada de Windows (Task Scheduler) con elevación UAC dinámica para ejecutar la aplicación en segundo plano a las horas planificadas.
 
+### 5. Nuevas Funcionalidades (Versión 2.2.0)
+- **Gestión Inteligente de Cancelaciones:** Validación estricta que previene pedidos adicionales en el mismo día tras una cancelación. La restricción se reinicia de manera autónoma al cambiar de día.
+- **Modo Solicitud Manual:** Botón dedicado para forzar la petición de almuerzo, esquivando el seguro de cancelación diaria.
+- **Auto-Limpieza Semanal:** Tarea del planificador que purga automáticamente logs y capturas de pantalla de la carpeta `evidence/` cuando superan los 7 días de antigüedad.
+- **Mantenimiento Manual:** Nueva opción en la interfaz para limpiar inmediatamente todos los registros y evidencias pasadas, preservando únicamente los archivos críticos en uso.
+- **Actualización Estética y Empaquetado:** Reparación del error visual de los `Checkbutton` en Windows oscuro mediante el módulo `ttk`, corrección del archivo `build.bat` para evitar bloqueos del sistema operativo (antivirus race conditions) durante la compresión del ejecutable, e inclusión del nuevo arte conceptual de "Bender Chef".
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)

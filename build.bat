@@ -144,6 +144,10 @@ echo.
 if defined PACKAGE_FLAG (
     echo [INFO] Creando archivo comprimido ZIP para distribucion...
     if exist "dist\SiGCABot_Release.zip" del /f /q "dist\SiGCABot_Release.zip"
+    
+    echo [INFO] Esperando 5 segundos para que Windows libere el ejecutable...
+    timeout /t 5 /nobreak >nul
+    
     powershell -NoProfile -Command "Compress-Archive -Path dist\SiGCABot_Release\* -DestinationPath dist\SiGCABot_Release.zip -Force"
     if errorlevel 1 (
         echo [ERROR] No se pudo crear el archivo ZIP.

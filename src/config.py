@@ -11,6 +11,7 @@ import ctypes
 import threading
 import winreg
 import logging
+from datetime import datetime
 
 logger = logging.getLogger("SiGCABot")
 
@@ -95,7 +96,32 @@ def load_status():
         if os.path.exists(STATUS_PATH):
             try:
                 with open(STATUS_PATH, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    
+                    # Realizar auto-limpieza si cambió el día
+                    today_str = datetime.now().strftime("%Y-%m-%d")
+                    changed = False
+                    
+                    # Limpiar cancelaciones si es otro día
+                    cancel_date = data.get("last_cancellation_date", "")
+                    if cancel_date and cancel_date != today_str:
+                        data["last_cancellation_date"] = ""
+                        data["cancellations_count"] = 0
+                        data["is_cancelled_today"] = False
+                        changed = True
+                        
+                    # Si no tiene el campo is_cancelled_today, inicializarlo
+                    if "is_cancelled_today" not in data:
+                        data["is_cancelled_today"] = False
+                        changed = True
+                        
+                    if changed:
+                        try:
+                            with open(STATUS_PATH, "w", encoding="utf-8") as fw:
+                                json.dump(data, fw, indent=2, ensure_ascii=False)
+                        except Exception:
+                            pass
+                    return data
             except Exception:
                 pass
         return {
@@ -103,7 +129,11 @@ def load_status():
             "last_successful_run": "",
             "last_run_timestamp": "Nunca",
             "last_run_status": "N/A",
-            "startup_on_boot": False
+            "startup_on_boot": False,
+            "cancellations_count": 0,
+            "last_cancellation_date": "",
+            "is_cancelled_today": False,
+            "last_cleanup_date": ""
         }
 
 

@@ -42,7 +42,7 @@ def send_windows_toast(title, message):
     try:
         res = subprocess.run(
             ["powershell", "-Command", powershell_cmd],
-            capture_output=True, text=True
+            capture_output=True, text=True, timeout=10
         )
         if res.returncode != 0:
             raise RuntimeError(res.stderr)
@@ -58,10 +58,13 @@ def send_windows_toast(title, message):
         $notification.Visible = $True
         $notification.ShowBalloonTip(7000)
         """
-        subprocess.run(
-            ["powershell", "-Command", fallback_cmd],
-            capture_output=True, text=True
-        )
+        try:
+            subprocess.run(
+                ["powershell", "-Command", fallback_cmd],
+                capture_output=True, text=True, timeout=10
+            )
+        except Exception as fe:
+            logger.warning(f"Fallo al enviar Balloon Notification fallback: {fe}")
 
 # ---------------------------------------------------------------------------
 # Notificaciones por Telegram — Mensajes de texto

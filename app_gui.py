@@ -76,13 +76,7 @@ if _args.run_job or _args.cancel_order:
 # Modo GUI (por defecto): Interfaz gráfica de escritorio
 # ---------------------------------------------------------------------------
 
-from src.config import (
-    hide_console, BASE_DIR, ASSET_DIR,
-    get_asset_path, load_status, save_status, load_config, save_config,
-    load_env_dict, save_env_values, set_startup,
-    BG_MAIN, BG_CARD, BG_INPUT, FG_TEXT, FG_MUTED,
-    ACCENT, ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW, ACCENT_BLUE,
-)
+from src.config import BASE_DIR, load_env_dict, save_env_values, load_config, save_config, get_asset_path, set_startup, BG_MAIN, BG_CARD, BG_INPUT, FG_TEXT, FG_MUTED, ACCENT, ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW, ACCENT_BLUE, load_status, save_status
 from src.logger import logger, gui_log_handler
 from src.bot_engine import LunchBot
 from src.health_server import start_http_server
@@ -95,6 +89,7 @@ from src.notifications import send_telegram_message
 from src import state
 
 # Ocultar consola en modo compilado (solo para GUI)
+from src.config import hide_console
 hide_console()
 
 import html
@@ -139,23 +134,37 @@ def _update_gui_status_badge_sync():
         return
     status_info = load_status()
     is_act = status_info.get("is_active", True)
+    init_text = "ACTIVO" if is_act else "INACTIVO"
+    init_bg = ACCENT_GREEN if is_act else ACCENT_RED
 
-    if is_act:
-        app.status_badge.configure(text="ACTIVO", bg=ACCENT_GREEN, fg="#11111b")
-        app.toggle_btn.configure(text="Desactivar Bot", bg=ACCENT_RED, activebackground="#f3a8b8")
-    else:
-        app.status_badge.configure(text="INACTIVO", bg=ACCENT_RED, fg="#11111b")
-        app.toggle_btn.configure(text="Activar Bot", bg=ACCENT_GREEN, activebackground="#a6f3b0")
+    if hasattr(app, "status_badge") and app.status_badge.winfo_exists():
+        app.status_badge.configure(text=init_text, bg=init_bg)
+        if is_act:
+            app.toggle_btn.configure(text="Desactivar Bot", bg=ACCENT_RED, activebackground="#f3a8b8")
+        else:
+            app.toggle_btn.configure(text="Activar Bot", bg=ACCENT_GREEN, activebackground="#a6f3b0")
 
-    app.last_run_lbl.configure(text=f"Último pedido:\n{status_info.get('last_run_timestamp', 'Nunca')}")
-    app.last_status_lbl.configure(text=f"Resultado: {status_info.get('last_run_status', 'N/A')}")
-
-    # Actualizar contador de cancelaciones
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    c_count = status_info.get("cancellations_count", 0)
-    if status_info.get("last_cancellation_date") != today_str:
-        c_count = 0
-    app.cancel_count_lbl.configure(text=f"Cancelaciones hoy: {c_count}/3")
+    # Actualizar labels e historial de estado
+    if hasattr(app, "last_run_lbl") and app.last_run_lbl.winfo_exists():
+        lr_date = status_info.get("last_run_timestamp", "Nunca")
+        app.last_run_lbl.configure(text=f"Último pedido:\n{lr_date}")
+    if hasattr(app, "last_status_lbl") and app.last_status_lbl.winfo_exists():
+        app.last_status_lbl.configure(text=f"Resultado: {status_info.get('last_run_status', 'N/A')}")
+        
+    # Refrescar conteo y UI de cancelación
+    if hasattr(app, "cancel_count_lbl") and app.cancel_count_lbl.winfo_exists():
+        c_count = status_info.get("cancellations_count", 0)
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        if status_info.get("last_cancellation_date") != today_str:
+            c_count = 0
+        app.cancel_count_lbl.configure(text=f"Cancelaciones hoy: {c_count}/3")
+        
+    if hasattr(app, "cancelled_var") and app.cancelled_chk.winfo_exists():
+        app.cancelled_var.set(status_info.get("is_cancelled_today", False))
+        
+    if hasattr(app, "cancel_date_lbl") and app.cancel_date_lbl.winfo_exists():
+        cancel_date = status_info.get("last_cancellation_date", "")
+        app.cancel_date_lbl.configure(text=f"Cancelado el: {cancel_date}" if cancel_date else "Cancelado el: N/A")
 
 
 # ---------------------------------------------------------------------------
@@ -464,9 +473,9 @@ class AppGUI:
         app = self
         self.root = root
         self.root.title("SiGCA Lunch Automation Panel")
-        self.root.geometry("1000x700")
+        self.root.geometry("1000x800")
         self.root.configure(bg=BG_MAIN)
-        self.root.resizable(False, False)
+        self.root.resizable(False, True)
         self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
 
         self.setup_styles()
@@ -497,7 +506,7 @@ class AppGUI:
         self.sidebar.pack_propagate(False)
 
         # Imagen de Bender
-        img_path = get_asset_path("bender_eating_burrito.png")
+        img_path = get_asset_path("bender_chef.png")
         if os.path.exists(img_path):
             try:
                 raw_img = Image.open(img_path)
@@ -514,7 +523,7 @@ class AppGUI:
         title_lbl = tk.Label(self.sidebar, text="SiGCA Lunch Bot", fg=FG_TEXT, bg=BG_CARD, font=("Segoe UI", 14, "bold"))
         title_lbl.pack()
 
-        version_lbl = tk.Label(self.sidebar, text="Versión 2.1.0", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 9))
+        version_lbl = tk.Label(self.sidebar, text="Versión 2.2.0", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 9))
         version_lbl.pack(pady=(0, 20))
 
         sep = tk.Frame(self.sidebar, height=1, bg=BG_INPUT)
@@ -546,7 +555,23 @@ class AppGUI:
         self.cancel_btn.pack(fill="x", padx=20, side="bottom", pady=(10, 0))
 
         self.cancel_count_lbl = tk.Label(self.sidebar, text="Cancelaciones hoy: 0/3", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8))
-        self.cancel_count_lbl.pack(side="bottom", pady=(10, 0))
+        self.cancel_count_lbl.pack(side="bottom", pady=(5, 0))
+
+        self.refresh_cancellations_btn = tk.Button(self.sidebar, text="↻ Refrescar", font=("Segoe UI", 8), bg=BG_INPUT, fg=FG_TEXT, bd=0, pady=2, cursor="hand2", command=self.refresh_cancellations)
+        self.refresh_cancellations_btn.pack(side="bottom", pady=(5, 0))
+        
+        self.cancel_date_lbl = tk.Label(self.sidebar, text="Cancelado el: N/A", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8))
+        self.cancel_date_lbl.pack(side="bottom")
+
+        self.cancelled_var = tk.BooleanVar(value=False)
+        
+        style = ttk.Style()
+        style.configure("Dark.TCheckbutton", background=BG_CARD, foreground=FG_TEXT, font=("Segoe UI", 8))
+        style.map("Dark.TCheckbutton", background=[("active", BG_CARD)], foreground=[("active", FG_TEXT)])
+        
+        self.cancelled_chk = ttk.Checkbutton(self.sidebar, text="Almuerzo Cancelado (Hoy)", style="Dark.TCheckbutton", variable=self.cancelled_var, command=self.toggle_cancelled_manually)
+        self.cancelled_chk.pack(side="bottom", pady=(10, 0))
+
 
         # 2. Main Panel
         self.main_panel = tk.Frame(self.root, bg=BG_MAIN, padx=15, pady=15)
@@ -682,6 +707,9 @@ class AppGUI:
 
         self.test_btn = tk.Button(btn_frame, text="Simular Pedido (Dry Run)", font=("Segoe UI", 10, "bold"), bg=ACCENT_YELLOW, fg="#11111b", bd=0, padx=15, pady=8, cursor="hand2", activeforeground="#11111b", command=self.run_dry_run_test)
         self.test_btn.pack(side="right")
+        
+        self.manual_btn = tk.Button(btn_frame, text="Solicitud Manual", font=("Segoe UI", 10, "bold"), bg=ACCENT_BLUE, fg="#11111b", bd=0, padx=15, pady=8, cursor="hand2", activeforeground="#11111b", command=self.run_manual_order)
+        self.manual_btn.pack(side="right", padx=(0, 10))
 
     # --- Tab Logs ---
 
@@ -721,6 +749,10 @@ class AppGUI:
 
         tk.Button(actions_frame, text="Abrir Directorio de Evidencias", font=("Segoe UI", 10, "bold"), bg=BG_INPUT, fg=FG_TEXT, bd=0, pady=8, padx=15, cursor="hand2", activebackground=BG_INPUT, activeforeground=FG_TEXT, command=self.open_evidence_folder).pack(side="left")
         tk.Button(actions_frame, text="Abrir Archivo de Logs (.log)", font=("Segoe UI", 10, "bold"), bg=BG_INPUT, fg=FG_TEXT, bd=0, pady=8, padx=15, cursor="hand2", activebackground=BG_INPUT, activeforeground=FG_TEXT, command=self.open_log_file).pack(side="right")
+
+        cleanup_frame = tk.Frame(info_frame, bg=BG_CARD)
+        cleanup_frame.pack(fill="x", pady=(0, 20))
+        tk.Button(cleanup_frame, text="🧹 Limpiar Todos los Registros (Logs y Evidencias)", font=("Segoe UI", 10, "bold"), bg=ACCENT_RED, fg="#11111b", bd=0, pady=8, padx=15, cursor="hand2", activebackground="#f3a8b8", activeforeground="#11111b", command=self.run_manual_cleanup).pack(side="left", fill="x", expand=True)
 
     # ------------------------------------------------------------------
     # Acciones e Interacciones
@@ -794,17 +826,20 @@ class AppGUI:
 
         status = load_status()
         self.startup_var.set(status.get("startup_on_boot", False))
+        self.cancelled_var.set(status.get("is_cancelled_today", False))
 
     def show_loading(self, text):
         self.loading_lbl.configure(text=text)
-        for btn in [self.save_btn, self.test_btn, self.tg_test_btn, self.cancel_btn, self.toggle_btn]:
+        for btn in [self.save_btn, self.test_btn, self.manual_btn, self.tg_test_btn, self.cancel_btn, self.toggle_btn, self.refresh_cancellations_btn]:
             btn.configure(state="disabled")
+        self.cancelled_chk.configure(state="disabled")
         self.root.update_idletasks()
 
     def hide_loading(self):
         self.loading_lbl.configure(text="")
-        for btn in [self.save_btn, self.test_btn, self.tg_test_btn, self.cancel_btn, self.toggle_btn]:
+        for btn in [self.save_btn, self.test_btn, self.manual_btn, self.tg_test_btn, self.cancel_btn, self.toggle_btn, self.refresh_cancellations_btn]:
             btn.configure(state="normal")
+        self.cancelled_chk.configure(state="normal")
         self.root.update_idletasks()
 
     def save_settings(self):
@@ -898,6 +933,32 @@ class AppGUI:
             logger.error(f"Simulación Dry-Run FALLÓ (código {exit_code}): {msg}")
             show_custom_error("Dry-Run Fallido", f"La simulación reportó un fallo:\n\n{msg}")
 
+    def run_manual_order(self):
+        self.show_loading("Iniciando solicitud manual de almuerzo. Por favor espera...")
+        logger.info("Iniciando solicitud manual...")
+
+        def run_manual_thread():
+            try:
+                bot = LunchBot()
+                bot.is_time_valid = lambda *args, **kwargs: True
+                exit_code, msg, evidence = bot.run_automation(dry_run=False, is_manual=True)
+                self.root.after(0, lambda: self._finish_manual_order(exit_code, msg, evidence))
+            except Exception as e:
+                self.root.after(0, lambda: self._finish_manual_order(5, f"Excepción crítica durante la solicitud: {e}", None))
+
+        threading.Thread(target=run_manual_thread, daemon=True).start()
+
+    def _finish_manual_order(self, exit_code, msg, evidence):
+        self.hide_loading()
+        update_gui_status_badge()
+        if exit_code == 0:
+            logger.info(f"Solicitud manual completada con ÉXITO: {msg}")
+            show_custom_success("Solicitud Exitosa", f"El pedido manual se completó correctamente:\n\n{msg}")
+        else:
+            logger.error(f"Solicitud manual FALLÓ (código {exit_code}): {msg}")
+            show_custom_error("Solicitud Fallida", f"El pedido manual reportó un fallo:\n\n{msg}")
+
+
     def confirm_cancel_lunch(self):
         status_info = load_status()
         today_str = datetime.now().strftime("%Y-%m-%d")
@@ -925,6 +986,20 @@ class AppGUI:
 
         threading.Thread(target=run_cancel_thread, daemon=True).start()
 
+    def run_manual_order(self):
+        if show_custom_confirm("Solicitud Manual", "¿Deseas forzar la ejecución del pedido AHORA MISMO?\n\nEsto ignorará cualquier cancelación previa que hayas hecho hoy."):
+            threading.Thread(target=self._run_bot_manual_thread, daemon=True).start()
+
+    def run_manual_cleanup(self):
+        if show_custom_confirm("Limpiar Registros", "¿Estás seguro de que deseas eliminar permanentemente todas las evidencias y logs antiguos?\n\nEsta acción no se puede deshacer."):
+            try:
+                from src.cleanup import clean_all_logs_and_evidence
+                deleted = clean_all_logs_and_evidence()
+                messagebox.showinfo("Limpieza Completada", f"Se han eliminado {deleted} archivos antiguos con éxito.")
+            except Exception as e:
+                logger.error(f"Error en limpieza manual: {e}")
+                messagebox.showerror("Error", f"Ocurrió un error al intentar limpiar los registros:\n{e}")
+
     def _finish_cancel_lunch(self, exit_code, msg, evidence):
         self.hide_loading()
         if exit_code == 0:
@@ -936,6 +1011,7 @@ class AppGUI:
             c_count += 1
             status_info["cancellations_count"] = c_count
             status_info["last_cancellation_date"] = today_str
+            status_info["is_cancelled_today"] = True
             status_info["last_run_timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             status_info["last_run_status"] = "cancelado"
             if "last_successful_run" in status_info:
@@ -951,7 +1027,22 @@ class AppGUI:
 
             show_custom_warning("Solicitud Cancelada", f"La solicitud de almuerzo ha sido cancelada con éxito.\n\nContador de cancelaciones de hoy: {c_count}/3.\nAdvertencia: El límite es de 3 cancelaciones por día.")
         else:
-            show_custom_error("Error al Cancelar", f"No se pudo completar la cancelación:\n\n{msg}")
+            logger.error(f"Cancelación FALLÓ (código {exit_code}): {msg}")
+            show_custom_error("Cancelación Fallida", f"Ocurrió un error al intentar cancelar:\n\n{msg}")
+
+    def toggle_cancelled_manually(self):
+        val = self.cancelled_var.get()
+        status_info = load_status()
+        status_info["is_cancelled_today"] = val
+        if val:
+            status_info["last_cancellation_date"] = datetime.now().strftime("%Y-%m-%d")
+        save_status(status_info)
+        update_gui_status_badge()
+        logger.info(f"Estado manual de cancelación modificado a: {val}")
+
+    def refresh_cancellations(self):
+        update_gui_status_badge()
+        logger.info("Estado de cancelaciones refrescado en la GUI")
 
     # --- Acciones del Programador de Tareas de Windows ---
 

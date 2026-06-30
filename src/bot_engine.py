@@ -14,15 +14,38 @@ import json
 import html
 import logging
 import asyncio
+import subprocess
 from datetime import datetime, time
 
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
-from src.config import BASE_DIR, ENV_PATH, CONFIG_PATH
+from src.config import BASE_DIR, ENV_PATH, CONFIG_PATH, load_status
 from src import notifications
 
 logger = logging.getLogger("SiGCABot")
+
+def kill_playwright_orphans():
+    """
+    Busca y termina procesos de Chromium y Node.js huérfanos iniciados por Playwright
+    para evitar fugas de memoria o procesos colgados.
+    No afecta al navegador Chrome principal del usuario.
+    """
+    logger.info("Limpiando procesos de Chromium y Node.js de Playwright huérfanos...")
+    powershell_cmd = (
+        "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { "
+        "($_.Name -eq 'chrome.exe' -or $_.Name -eq 'node.exe') -and "
+        "($_.ExecutablePath -like '*ms-playwright*' -or $_.ExecutablePath -like '*playwright*') } | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+    )
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", powershell_cmd],
+            capture_output=True, text=True, timeout=10
+        )
+        logger.info("Limpieza de procesos huérfanos completada.")
+    except Exception as e:
+        logger.warning(f"No se pudo completar la limpieza de procesos huérfanos: {e}")
 
 
 class LunchBot:
@@ -262,14 +285,30 @@ class LunchBot:
         """Intenta iniciar sesión en SiGCA con una contraseña dada."""
         logger.info(f"Intentando iniciar sesión con el usuario: {self.username} y contraseña tentativa...")
 
-        page.goto(self.url, wait_until="networkidle")
+        timeout = self.config.get("timeout_ms", 30000)
+
+        try:
+            page.goto(self.url, wait_until="networkidle", timeout=timeout)
+        except Exception as e:
+            err_msg = str(e)
+            logger.error(f"Fallo de conexión al cargar la URL {self.url}: {err_msg}")
+            
+            if "ERR_INTERNET_DISCONNECTED" in err_msg or "ERR_NAME_NOT_RESOLVED" in err_msg:
+                reason = "No hay conexión a Internet o el DNS no puede resolver la dirección."
+            elif "ERR_CONNECTION_REFUSED" in err_msg or "ERR_CONNECTION_TIMED_OUT" in err_msg:
+                reason = "El servidor de SiGCA rechazó la conexión o está fuera de línea."
+            elif "Timeout" in err_msg or "timeout" in err_msg.lower():
+                reason = f"Tiempo de espera agotado ({timeout/1000:.1f}s) cargando la página principal. Posible conexión lenta o servidor saturado."
+            else:
+                reason = "Fallo de conexión o red desconocido al acceder a SiGCA."
+            
+            raise ConnectionError(f"{reason} (Detalle técnico: {err_msg})")
 
         ms_sso_button = "button:has-text('Continuar con Microsoft'), button:has-text('Microsoft')"
         email_selector = "input[type='email'], input[placeholder*='usuario' i], input[placeholder*='correo' i], input[placeholder*='email' i], input[formcontrolname='email']"
         password_selector = "input[type='password'], input[placeholder*='contraseña' i], input[placeholder*='clave' i], input[formcontrolname='password']"
         submit_selector = "button[type='submit'], button:has-text('Iniciar'), button:has-text('Ingresar'), button:has-text('Login')"
 
-        timeout = self.config.get("timeout_ms", 30000)
 
         # Determinar si nos encontramos con SSO de Microsoft
         page.wait_for_timeout(2000)
@@ -350,12 +389,13 @@ class LunchBot:
     # Flujo principal de automatización del almuerzo
     # ------------------------------------------------------------------
 
-    def run_automation(self, dry_run=False):
+    def run_automation(self, dry_run=False, is_manual=False):
         """
         Ejecuta el flujo completo de solicitud de almuerzo.
 
         Args:
             dry_run: Si es True, no confirma el pedido final.
+            is_manual: Si es True, ignora la validación de cancelación diaria.
 
         Returns:
             Tupla (exit_code, message, evidence_path)
@@ -366,10 +406,19 @@ class LunchBot:
         """
         sim_str = " (SIMULACIÓN)" if dry_run else ""
         try:
+            if not is_manual:
+                status_data = load_status()
+                if status_data.get("is_cancelled_today", False):
+                    msg = "El bot está inactivo hoy porque el almuerzo fue cancelado."
+                    logger.warning(msg)
+                    return 0, msg, None
+
             if not dry_run and not self.is_time_valid():
                 msg = "Fuera de horario de ejecución (3:30 PM - 9:59 AM)."
                 logger.warning(msg)
                 return 0, msg, None
+
+            kill_playwright_orphans()
 
             # Asegurar bucle de eventos asyncio en este hilo
             try:
@@ -391,7 +440,10 @@ class LunchBot:
                     viewport={"width": 1280, "height": 720},
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 )
+                timeout_ms = self.config.get("timeout_ms", 30000)
+                context.set_default_timeout(timeout_ms)
                 page = context.new_page()
+                page.set_default_timeout(timeout_ms)
 
                 # Intentar login
                 self._notify_telegram("🔑 <b>Autenticación</b>:\nNavegador iniciado. Intentando iniciar sesión...")
@@ -401,6 +453,9 @@ class LunchBot:
                         if self.attempt_login(page, pwd):
                             login_success = True
                             break
+                    except ConnectionError as ce:
+                        logger.error(f"Error de conexión detectado. Abortando reintentos con otras contraseñas: {ce}")
+                        raise ce
                     except Exception as e:
                         logger.error(f"Excepción durante intento de login: {e}")
                         self.capture_evidence(page, "login_error_exception")
@@ -643,6 +698,8 @@ class LunchBot:
             self._notify_toast("Error en Automatización", "Ocurrió un error inesperado al procesar la solicitud.")
             self._notify_telegram(f"❌ <b>Fallo en Automatización de Almuerzo</b>:\n<pre>{html.escape(msg)}</pre>")
             return 3, msg, None
+        finally:
+            kill_playwright_orphans()
 
     # ------------------------------------------------------------------
     # Cancelación de pedido de almuerzo
@@ -656,6 +713,8 @@ class LunchBot:
             Tupla (exit_code, message, evidence_path)
         """
         try:
+            kill_playwright_orphans()
+
             self._notify_toast("Cancelando Almuerzo", "Iniciando proceso de cancelación en SiGCA...")
             self._notify_telegram("🤖 <b>SiGCA Bot</b>:\nIniciando cancelación de solicitud de almuerzo...")
 
@@ -673,7 +732,10 @@ class LunchBot:
                     viewport={"width": 1280, "height": 720},
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 )
+                timeout_ms = self.config.get("timeout_ms", 30000)
+                context.set_default_timeout(timeout_ms)
                 page = context.new_page()
+                page.set_default_timeout(timeout_ms)
 
                 try:
                     # Intentar login
@@ -683,6 +745,9 @@ class LunchBot:
                             if self.attempt_login(page, pwd):
                                 login_success = True
                                 break
+                        except ConnectionError as ce:
+                            logger.error(f"Error de conexión detectado. Abortando reintentos con otras contraseñas: {ce}")
+                            raise ce
                         except Exception as e:
                             logger.error(f"Excepción durante intento de login para cancelación: {e}")
 
@@ -787,3 +852,5 @@ class LunchBot:
             self._notify_toast("Error al Cancelar", "Ocurrió un error inesperado al cancelar.")
             self._notify_telegram(f"❌ <b>Fallo al Cancelar Almuerzo</b>:\n<pre>{html.escape(msg)}</pre>")
             return 3, msg, None
+        finally:
+            kill_playwright_orphans()

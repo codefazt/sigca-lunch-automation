@@ -86,7 +86,33 @@ def start_scheduler(gui_update_callback=None):
     logger.info("Hilo Planificador iniciado. Buscando ventana horaria 3:30 PM - 9:59 AM.")
     while not state.stop_threads:
         status_info = load_status()
-        if status_info.get("is_active", True):
+        
+        # --- Limpieza automática semanal ---
+        last_cleanup_str = status_info.get("last_cleanup_date", "")
+        today_date = datetime.now()
+        needs_cleanup = False
+        
+        if not last_cleanup_str:
+            needs_cleanup = True
+        else:
+            try:
+                last_cleanup = datetime.strptime(last_cleanup_str, "%Y-%m-%d")
+                if (today_date - last_cleanup).days >= 7:
+                    needs_cleanup = True
+            except Exception:
+                needs_cleanup = True
+                
+        if needs_cleanup:
+            try:
+                from src.cleanup import clean_old_logs_and_evidence
+                clean_old_logs_and_evidence(days=7)
+                # Recargar status ya que cleanup.py lo modificó
+                status_info = load_status()
+            except Exception as e:
+                logger.error(f"Error durante la limpieza automática semanal: {e}")
+        # -----------------------------------
+
+        if status_info.get("is_active", True) and not status_info.get("is_cancelled_today", False):
             # Comprobar si ya se ejecutó con éxito hoy
             today_str = datetime.now().strftime("%Y-%m-%d")
             if status_info.get("last_successful_run") != today_str:

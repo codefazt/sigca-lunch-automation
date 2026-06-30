@@ -18,7 +18,7 @@ a = Analysis(
     pathex=['.'],
     binaries=[],
     datas=[
-        ('bender_eating_burrito.png', '.'),
+        ('bender_chef.png', '.'),
         ('robot_hamburger_icon.png', '.'),
         ('src', 'src'),
     ],
@@ -56,7 +56,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

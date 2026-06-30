@@ -52,7 +52,7 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
             "active": status_data.get("is_active", True),
             "last_run": status_data.get("last_run_timestamp", "Nunca"),
             "last_status": status_data.get("last_run_status", "N/A"),
-            "version": "2.1.0"
+            "version": "2.2.0"
         }
         self.wfile.write(json.dumps(response).encode("utf-8"))
 
