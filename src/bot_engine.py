@@ -15,6 +15,7 @@ import html
 import logging
 import asyncio
 import subprocess
+import threading
 from datetime import datetime, time
 
 from dotenv import load_dotenv
@@ -81,12 +82,13 @@ class LunchBot:
 
     def load_credentials(self):
         """Recarga las variables de entorno desde .env y extrae credenciales."""
-        load_dotenv(ENV_PATH, override=True)
-        self.username = os.getenv("SIGCA_USER")
-        passwords_raw = os.getenv("SIGCA_PASSWORDS")
-        self.url = os.getenv("SIGCA_URL", "https://sigca.ex-cle.com/")
-        self.telegram_token = os.getenv("TELEGRAM_TOKEN")
-        self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
+        from src.config import load_env_dict
+        env = load_env_dict()
+        self.username = env.get("SIGCA_USER")
+        passwords_raw = env.get("SIGCA_PASSWORDS")
+        self.url = env.get("SIGCA_URL", "https://sigca.ex-cle.com/")
+        self.telegram_token = env.get("TELEGRAM_TOKEN")
+        self.telegram_chat_id = env.get("TELEGRAM_CHAT_ID")
 
         if not self.username:
             raise ValueError("Falta la variable de entorno SIGCA_USER")
@@ -102,17 +104,25 @@ class LunchBot:
     # ------------------------------------------------------------------
 
     def _notify_toast(self, title, message):
-        notifications.send_windows_toast(title, message)
+        threading.Thread(
+            target=notifications.send_windows_toast,
+            args=(title, message),
+            daemon=True
+        ).start()
 
     def _notify_telegram(self, message):
-        notifications.send_telegram_message(
-            self.telegram_token, self.telegram_chat_id, message
-        )
+        threading.Thread(
+            target=notifications.send_telegram_message,
+            args=(self.telegram_token, self.telegram_chat_id, message),
+            daemon=True
+        ).start()
 
     def _notify_telegram_photo(self, photo_path, caption=None):
-        notifications.send_telegram_photo(
-            self.telegram_token, self.telegram_chat_id, photo_path, caption
-        )
+        threading.Thread(
+            target=notifications.send_telegram_photo,
+            args=(self.telegram_token, self.telegram_chat_id, photo_path, caption),
+            daemon=True
+        ).start()
 
     # ------------------------------------------------------------------
     # Validación horaria

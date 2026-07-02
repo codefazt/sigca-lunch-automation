@@ -11,9 +11,38 @@ import ctypes
 import threading
 import winreg
 import logging
+import base64
 from datetime import datetime
 
 logger = logging.getLogger("SiGCABot")
+
+# ---------------------------------------------------------------------------
+# Ofuscación / Encriptación simple de campos sensibles
+# ---------------------------------------------------------------------------
+
+def obfuscate_text(text):
+    """Ofusca/encripta texto de forma simple usando XOR y Base64."""
+    if not text:
+        return ""
+    key = "SiGCABotSecureKey2026"
+    xored = bytearray(c ^ ord(key[i % len(key)]) for i, c in enumerate(text.encode("utf-8")))
+    return base64.b64encode(xored).decode("utf-8")
+
+def deobfuscate_text(obfuscated):
+    """Desofusca/desencripta texto obtenido con obfuscate_text."""
+    if not obfuscated:
+        return ""
+    try:
+        # Si el texto ya está ofuscado, debe ser base64 válido y descodificable
+        # con la clave
+        key = "SiGCABotSecureKey2026"
+        data = base64.b64decode(obfuscated.encode("utf-8"), validate=True)
+        xored = bytearray(b ^ ord(key[i % len(key)]) for i, b in enumerate(data))
+        return xored.decode("utf-8")
+    except Exception:
+        # Si no es base64 válido o falla la descodificación, retornamos el texto
+        # original para compatibilidad con .env sin ofuscar (texto plano)
+        return obfuscated
 
 # ---------------------------------------------------------------------------
 # Inicialización del entorno (se ejecuta al importar este módulo)
@@ -202,11 +231,26 @@ def load_env_dict():
                 if line and not line.startswith("#") and "=" in line:
                     k, v = line.split("=", 1)
                     env[k.strip()] = v.strip()
+                    
+    # Desofuscar campos sensibles
+    if "SIGCA_PASSWORDS" in env:
+        env["SIGCA_PASSWORDS"] = deobfuscate_text(env["SIGCA_PASSWORDS"])
+    if "TELEGRAM_TOKEN" in env:
+        env["TELEGRAM_TOKEN"] = deobfuscate_text(env["TELEGRAM_TOKEN"])
+        
     return env
 
 
 def save_env_values(values):
     """Actualiza o añade claves en el archivo .env preservando comentarios."""
+    values_copy = values.copy()
+    
+    # Ofuscar campos sensibles antes de guardar
+    if "SIGCA_PASSWORDS" in values_copy:
+        values_copy["SIGCA_PASSWORDS"] = obfuscate_text(values_copy["SIGCA_PASSWORDS"])
+    if "TELEGRAM_TOKEN" in values_copy:
+        values_copy["TELEGRAM_TOKEN"] = obfuscate_text(values_copy["TELEGRAM_TOKEN"])
+
     current_lines = []
     if os.path.exists(ENV_PATH):
         with open(ENV_PATH, "r", encoding="utf-8") as f:
@@ -222,15 +266,15 @@ def save_env_values(values):
         if "=" in line:
             key, _ = line.split("=", 1)
             key = key.strip()
-            if key in values:
-                new_lines.append(f"{key}={values[key]}\n")
+            if key in values_copy:
+                new_lines.append(f"{key}={values_copy[key]}\n")
                 updated_keys.add(key)
             else:
                 new_lines.append(line)
         else:
             new_lines.append(line)
 
-    for key, val in values.items():
+    for key, val in values_copy.items():
         if key not in updated_keys:
             new_lines.append(f"{key}={val}\n")
 
