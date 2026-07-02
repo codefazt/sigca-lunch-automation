@@ -7,5 +7,13 @@
   "headless": true,
   "retries": 3,
   "retry_delay_sec": 300,
-  "prefer_menu": "estándar"
+  "prefer_menu": "estándar",
+  "questionnaire": {
+    "ubicacion": "Sede ExCle",
+    "estrellas": "3",
+    "bien_cocidos": "last",
+    "porcion_acorde": "last",
+    "asistir_tarde": "Sí",
+    "comentario": "Favor quitar el jugo de melon y las porciones no tienen suficiente proteina, quedando uno con hambre"
+  }
 }

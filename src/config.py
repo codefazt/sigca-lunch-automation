@@ -167,7 +167,16 @@ def load_config():
         "headless": True,
         "retries": 3,
         "retry_delay_sec": 300,
-        "prefer_menu": "saludable"
+        "prefer_menu": "saludable",
+        "questionnaire": {
+            "ubicacion": "Sede ExCle",
+            "estrellas": "3",
+            "bien_cocidos": "last",
+            "porcion_acorde": "last",
+            "condimentacion": 1,
+            "asistir_tarde": "Sí",
+            "comentario": "Favor quitar el jugo de melon y las porciones no tienen suficiente proteina, quedando uno con hambre"
+        }
     }
 
 

@@ -115,9 +115,13 @@ copy /y "run_job.bat" "dist\SiGCABot_Release\run_job.bat"
 copy /y "README.md" "dist\SiGCABot_Release\README.md"
 copy /y "WINDOWS_SCHEDULER.md" "dist\SiGCABot_Release\WINDOWS_SCHEDULER.md"
 
+:: Copiar carpeta de imágenes de manual
+xcopy /e /i /y "images_info" "dist\SiGCABot_Release\images_info"
+
 :: Crear carpetas necesarias
 mkdir "dist\SiGCABot_Release\logs" 2>nul
 mkdir "dist\SiGCABot_Release\evidence" 2>nul
+
 
 :: Crear config.json por defecto
 echo {"start_hour": 15, "start_minute": 30, "end_hour": 10, "end_minute": 0, "timeout_ms": 30000, "headless": true, "retries": 3, "retry_delay_sec": 300, "prefer_menu": "saludable"} > "dist\SiGCABot_Release\config.json"

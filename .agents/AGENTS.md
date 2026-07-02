@@ -42,7 +42,10 @@ El proyecto se divide en el script principal de entrada y un paquete de módulos
   - Texto (`FG_TEXT`): `#cdd6f4`
   - Accent (`ACCENT`): `#b4befe`
   - Estados: Verde (`ACCENT_GREEN`), Rojo (`ACCENT_RED`), Amarillo (`ACCENT_YELLOW`), Azul (`ACCENT_BLUE`).
+- **Diseño de Ventanas Emergentes (Popups) y Alertas:** Nunca utilices `messagebox` estándar de Tkinter. Todas las notificaciones del bot y cajas de confirmación dentro de la GUI deben heredar o instanciar `PremiumMessageBox` o `PremiumConfirmBox` con bordes exteriores de `2px` coloreados según la severidad (`ACCENT_BLUE` para información, `ACCENT_GREEN` para éxito, `ACCENT_YELLOW` para advertencias, y `ACCENT_RED` para errores) y hover dinámico en botones.
+- **Regla Anti-Deadlock de Tkinter (Modales):** Nunca utilices `self.wait_window()` dentro del constructor `__init__` de un `Toplevel` que también use `grab_set()`, ya que congelará el Hilo Principal. En su lugar, el objeto de la ventana modal debe instanciarse completamente, y la función llamadora es la responsable de invocar `parent.wait_window(dialog)`.
 
 ### 3. Manejo de Procesos y Programación en Windows
 - Al interactuar con el Programador de Tareas, genera comandos PowerShell envueltos en codificación Base64 si contienen caracteres especiales o rutas de Windows complejas.
 - Garantiza que `PLAYWRIGHT_BROWSERS_PATH` esté correctamente configurado en la carpeta de AppData local del usuario para evitar fallos de ejecución cuando se ejecuta bajo contextos de sistema o tareas programadas de Windows.
+

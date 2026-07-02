@@ -36,6 +36,17 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
 - **Mantenimiento Manual:** Nueva opción en la interfaz para limpiar inmediatamente todos los registros y evidencias pasadas, preservando únicamente los archivos críticos en uso.
 - **Actualización Estética y Empaquetado:** Reparación del error visual de los `Checkbutton` en Windows oscuro mediante el módulo `ttk`, corrección del archivo `build.bat` para evitar bloqueos del sistema operativo (antivirus race conditions) durante la compresión del ejecutable, e inclusión del nuevo arte conceptual de "Bender Chef".
 
+### 6. Manual Integrado y Documentación Web (Versión 2.3.0)
+- **Manual Visual paso a paso (GUI):** Pestaña "Manual de Uso" integrada con scroll fluido, que contiene explicaciones detalladas y capturas de cada sección de la aplicación (`images_info/`).
+- **Documentación Extensa Web:** Endpoint HTTP `/manual` que sirve una interfaz oscura premium con Outfit/Inter font, que documenta de manera integral el bot, las variables `.env`, config.json y reintentos automáticos.
+- **Ruta de Recursos `/images_info`:** Endpoint HTTP seguro en el health check local que sirve recursos estáticos para la documentación en el navegador de manera controlada con `os.path.basename` (previniendo path traversal).
+- **Compilación de Activos:** Modificación de `SiGCABot.spec` y `build.bat` para asegurar que el directorio `images_info` esté completamente empaquetado tanto dentro de la estructura de recursos internos (`sys._MEIPASS`) como físicamente en el directorio portable.
+
+### 7. Directrices Estéticas para Notificaciones y Modales
+- **Prohibición de Ventanas Nativas:** Prohibido el uso de diálogos messagebox de Tkinter nativos (grises y asimétricos).
+- **Modales Premium Integrados:** Implementación del estilo Catppuccin para notificaciones internas de primer plano con un borde de `2px` que indica severidad (`ACCENT_BLUE` para información, `ACCENT_GREEN` para éxito, `ACCENT_YELLOW` para alertas, `ACCENT_RED` para errores) e interactividad con efectos hover dinámicos en los botones.
+- **Notificaciones Toast Windows:** Los Toasts se reservan para notificaciones en segundo plano, siempre envueltos en bloques robustos de excepciones.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)

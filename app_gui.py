@@ -279,7 +279,6 @@ class PremiumMessageBox(tk.Toplevel):
 
         self.bind("<Return>", lambda e: self.destroy())
         self.bind("<Escape>", lambda e: self.destroy())
-        self.wait_window()
 
     def _start_drag(self, event):
         self.drag_data["x"] = event.x
@@ -300,25 +299,29 @@ class PremiumMessageBox(tk.Toplevel):
 
 def show_custom_info(title, message):
     if app and app.root:
-        PremiumMessageBox(app.root, title, message, "info")
+        dialog = PremiumMessageBox(app.root, title, message, "info")
+        app.root.wait_window(dialog)
     else:
         messagebox.showinfo(title, message)
 
 def show_custom_success(title, message):
     if app and app.root:
-        PremiumMessageBox(app.root, title, message, "success")
+        dialog = PremiumMessageBox(app.root, title, message, "success")
+        app.root.wait_window(dialog)
     else:
         messagebox.showinfo(title, message)
 
 def show_custom_error(title, message):
     if app and app.root:
-        PremiumMessageBox(app.root, title, message, "error")
+        dialog = PremiumMessageBox(app.root, title, message, "error")
+        app.root.wait_window(dialog)
     else:
         messagebox.showerror(title, message)
 
 def show_custom_warning(title, message):
     if app and app.root:
-        PremiumMessageBox(app.root, title, message, "warning")
+        dialog = PremiumMessageBox(app.root, title, message, "warning")
+        app.root.wait_window(dialog)
     else:
         messagebox.showwarning(title, message)
 
@@ -428,7 +431,6 @@ class PremiumConfirmBox(tk.Toplevel):
 
         self.bind("<Return>", lambda e: self.on_yes())
         self.bind("<Escape>", lambda e: self.on_no())
-        self.wait_window()
 
     def on_yes(self):
         self.result = True
@@ -458,6 +460,7 @@ class PremiumConfirmBox(tk.Toplevel):
 def show_custom_confirm(title, message):
     if app and app.root:
         dialog = PremiumConfirmBox(app.root, title, message)
+        app.root.wait_window(dialog)
         return dialog.result
     else:
         return messagebox.askyesno(title, message)
@@ -473,9 +476,9 @@ class AppGUI:
         app = self
         self.root = root
         self.root.title("SiGCA Lunch Automation Panel")
-        self.root.geometry("1000x800")
+        self.root.geometry("1000x650")
         self.root.configure(bg=BG_MAIN)
-        self.root.resizable(False, True)
+        self.root.resizable(True, True)
         self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
 
         self.setup_styles()
@@ -505,75 +508,77 @@ class AppGUI:
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
-        # Imagen de Bender
+        # Imagen de Bender (escalada a 120x120 para optimizar espacio vertical)
         img_path = get_asset_path("bender_chef.png")
         if os.path.exists(img_path):
             try:
                 raw_img = Image.open(img_path)
-                resized = raw_img.resize((200, 200), Image.Resampling.LANCZOS)
+                resized = raw_img.resize((120, 120), Image.Resampling.LANCZOS)
                 self.bender_img = ImageTk.PhotoImage(resized)
                 img_lbl = tk.Label(self.sidebar, image=self.bender_img, bg=BG_CARD)
-                img_lbl.pack(pady=20)
+                img_lbl.pack(pady=(10, 5))
             except Exception as e:
                 logger.error(f"Error cargando imagen bender: {e}")
         else:
-            lbl = tk.Label(self.sidebar, text="🤖 LunchBot", fg=ACCENT, bg=BG_CARD, font=("Segoe UI", 20, "bold"))
-            lbl.pack(pady=40)
+            lbl = tk.Label(self.sidebar, text="🤖 LunchBot", fg=ACCENT, bg=BG_CARD, font=("Segoe UI", 16, "bold"))
+            lbl.pack(pady=15)
 
-        title_lbl = tk.Label(self.sidebar, text="SiGCA Lunch Bot", fg=FG_TEXT, bg=BG_CARD, font=("Segoe UI", 14, "bold"))
+        title_lbl = tk.Label(self.sidebar, text="SiGCA Lunch Bot", fg=FG_TEXT, bg=BG_CARD, font=("Segoe UI", 12, "bold"))
         title_lbl.pack()
 
-        version_lbl = tk.Label(self.sidebar, text="Versión 2.2.0", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 9))
-        version_lbl.pack(pady=(0, 20))
+        version_lbl = tk.Label(self.sidebar, text="Versión 2.2.0", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8))
+        version_lbl.pack(pady=(0, 5))
 
         sep = tk.Frame(self.sidebar, height=1, bg=BG_INPUT)
-        sep.pack(fill="x", padx=20, pady=10)
+        sep.pack(fill="x", padx=20, pady=5)
 
         # Badge de Estado
         state_title = tk.Label(self.sidebar, text="ESTADO DEL SERVICIO", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8, "bold"))
-        state_title.pack(pady=(10, 5))
+        state_title.pack(pady=(5, 2))
 
         status_info = load_status()
         is_act = status_info.get("is_active", True)
         init_text = "ACTIVO" if is_act else "INACTIVO"
         init_bg = ACCENT_GREEN if is_act else ACCENT_RED
-        self.status_badge = tk.Label(self.sidebar, text=init_text, font=("Segoe UI", 11, "bold"), bg=init_bg, fg="#11111b", width=16, pady=4, bd=0)
-        self.status_badge.pack(pady=5)
+        self.status_badge = tk.Label(self.sidebar, text=init_text, font=("Segoe UI", 10, "bold"), bg=init_bg, fg="#11111b", width=14, pady=3, bd=0)
+        self.status_badge.pack(pady=3)
 
-        self.last_run_lbl = tk.Label(self.sidebar, text="Último pedido:\nCargando...", fg=FG_TEXT, bg=BG_CARD, font=("Segoe UI", 9), justify="center")
-        self.last_run_lbl.pack(pady=(15, 2))
+        self.last_run_lbl = tk.Label(self.sidebar, text="Último pedido:\nCargando...", fg=FG_TEXT, bg=BG_CARD, font=("Segoe UI", 8), justify="center")
+        self.last_run_lbl.pack(pady=(5, 1))
 
         self.last_status_lbl = tk.Label(self.sidebar, text="Resultado: -", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8))
-        self.last_status_lbl.pack(pady=(0, 20))
+        self.last_status_lbl.pack(pady=(0, 5))
 
-        # Botón Toggle
-        self.toggle_btn = tk.Button(self.sidebar, text="Alternar Estado", font=("Segoe UI", 10, "bold"), bg=ACCENT, fg="#11111b", bd=0, pady=8, cursor="hand2", activeforeground="#11111b", command=self.toggle_bot_state)
-        self.toggle_btn.pack(fill="x", padx=20, side="bottom", pady=(10, 20))
+        # --- Botones y Checkbox organizados de forma secuencial de arriba a abajo ---
+        # Botón Toggle (Alternar Estado)
+        self.toggle_btn = tk.Button(self.sidebar, text="Alternar Estado", font=("Segoe UI", 9, "bold"), bg=ACCENT, fg="#11111b", bd=0, pady=6, cursor="hand2", activeforeground="#11111b", command=self.toggle_bot_state)
+        self.toggle_btn.pack(fill="x", padx=20, pady=4)
 
         # Botón Cancelar
-        self.cancel_btn = tk.Button(self.sidebar, text="Cancelar Solicitud", font=("Segoe UI", 10, "bold"), bg=ACCENT_RED, fg="#11111b", bd=0, pady=8, cursor="hand2", activeforeground="#11111b", activebackground="#f3a8b8", command=self.confirm_cancel_lunch)
-        self.cancel_btn.pack(fill="x", padx=20, side="bottom", pady=(10, 0))
+        self.cancel_btn = tk.Button(self.sidebar, text="Cancelar Solicitud", font=("Segoe UI", 9, "bold"), bg=ACCENT_RED, fg="#11111b", bd=0, pady=6, cursor="hand2", activeforeground="#11111b", activebackground="#f3a8b8", command=self.confirm_cancel_lunch)
+        self.cancel_btn.pack(fill="x", padx=20, pady=4)
 
-        self.cancel_count_lbl = tk.Label(self.sidebar, text="Cancelaciones hoy: 0/3", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8))
-        self.cancel_count_lbl.pack(side="bottom", pady=(5, 0))
-
-        self.refresh_cancellations_btn = tk.Button(self.sidebar, text="↻ Refrescar", font=("Segoe UI", 8), bg=BG_INPUT, fg=FG_TEXT, bd=0, pady=2, cursor="hand2", command=self.refresh_cancellations)
-        self.refresh_cancellations_btn.pack(side="bottom", pady=(5, 0))
-        
-        self.cancel_date_lbl = tk.Label(self.sidebar, text="Cancelado el: N/A", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8))
-        self.cancel_date_lbl.pack(side="bottom")
-
+        # Checkbox Cancelación
         self.cancelled_var = tk.BooleanVar(value=False)
-        
         style = ttk.Style()
         style.configure("Dark.TCheckbutton", background=BG_CARD, foreground=FG_TEXT, font=("Segoe UI", 8))
         style.map("Dark.TCheckbutton", background=[("active", BG_CARD)], foreground=[("active", FG_TEXT)])
         
         self.cancelled_chk = ttk.Checkbutton(self.sidebar, text="Almuerzo Cancelado (Hoy)", style="Dark.TCheckbutton", variable=self.cancelled_var, command=self.toggle_cancelled_manually)
-        self.cancelled_chk.pack(side="bottom", pady=(10, 0))
+        self.cancelled_chk.pack(pady=4)
 
+        # Información de Cancelaciones y Mantenimiento
+        self.cancel_count_lbl = tk.Label(self.sidebar, text="Cancelaciones hoy: 0/3", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8))
+        self.cancel_count_lbl.pack(pady=1)
+
+        self.cancel_date_lbl = tk.Label(self.sidebar, text="Cancelado el: N/A", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8))
+        self.cancel_date_lbl.pack(pady=1)
+
+        self.refresh_cancellations_btn = tk.Button(self.sidebar, text="↻ Refrescar", font=("Segoe UI", 8), bg=BG_INPUT, fg=FG_TEXT, bd=0, pady=2, cursor="hand2", command=self.refresh_cancellations)
+        self.refresh_cancellations_btn.pack(pady=4)
 
         # 2. Main Panel
+
         self.main_panel = tk.Frame(self.root, bg=BG_MAIN, padx=15, pady=15)
         self.main_panel.pack(side="right", fill="both", expand=True)
 
@@ -585,6 +590,11 @@ class AppGUI:
         self.notebook.add(self.tab_config, text="Configuración")
         self.create_config_tab()
 
+        # Tab Cuestionario
+        self.tab_questionnaire = tk.Frame(self.notebook, bg=BG_MAIN)
+        self.notebook.add(self.tab_questionnaire, text="Cuestionario")
+        self.create_questionnaire_tab()
+
         # Tab 2: Logs
         self.tab_logs = tk.Frame(self.notebook, bg=BG_MAIN)
         self.notebook.add(self.tab_logs, text="Consola de Logs")
@@ -594,6 +604,12 @@ class AppGUI:
         self.tab_health = tk.Frame(self.notebook, bg=BG_MAIN)
         self.notebook.add(self.tab_health, text="Salud & API")
         self.create_health_tab()
+
+        # Tab 4: Manual de Uso
+        self.tab_manual = tk.Frame(self.notebook, bg=BG_MAIN)
+        self.notebook.add(self.tab_manual, text="Manual de Uso")
+        self.create_manual_tab()
+
 
     # --- Tab Configuración ---
 
@@ -711,6 +727,104 @@ class AppGUI:
         self.manual_btn = tk.Button(btn_frame, text="Solicitud Manual", font=("Segoe UI", 10, "bold"), bg=ACCENT_BLUE, fg="#11111b", bd=0, padx=15, pady=8, cursor="hand2", activeforeground="#11111b", command=self.run_manual_order)
         self.manual_btn.pack(side="right", padx=(0, 10))
 
+    # --- Tab Cuestionario ---
+
+    def create_questionnaire_tab(self):
+        canvas = tk.Canvas(self.tab_questionnaire, bg=BG_MAIN, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.tab_questionnaire, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=BG_MAIN)
+
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_window, width=e.width))
+        
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Scroll con rueda del mouse
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+        header_frame = tk.Frame(scrollable_frame, bg=BG_CARD, padx=15, pady=15, bd=1, highlightbackground=BG_INPUT)
+        header_frame.pack(fill="x", pady=10, padx=5)
+
+        tk.Label(header_frame, text="Configuración del Formulario Adicional", font=("Segoe UI", 12, "bold"), bg=BG_CARD, fg=ACCENT).pack(anchor="w")
+        tk.Label(header_frame, text="Modifica las respuestas predeterminadas que usará el bot al completar las encuestas diarias.", bg=BG_CARD, fg=FG_TEXT).pack(anchor="w", pady=(5,0))
+
+        fields_frame = tk.Frame(scrollable_frame, bg=BG_MAIN)
+        fields_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Ubicación
+        tk.Label(fields_frame, text="Ubicación (Sede):", bg=BG_MAIN, fg=FG_TEXT, font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w", pady=(10, 2), padx=5)
+        ubicaciones = ["Sede ExCle", "CNE Plaza Venezuela", "CNE Plaza Caracas", "UBV", "Mariche III", "Vicepresidencia", "SAIME Torre ACO Las Mercedes", "Otro", "PDVSA La Campiña", "INTEVEP - Los Teques", "Mariche I", "Mariche II", "SAIME Principal", "PDVSA Venadria"]
+        self.q_ubicacion_cb = ttk.Combobox(fields_frame, values=ubicaciones, state="readonly", width=40)
+        self.q_ubicacion_cb.grid(row=0, column=1, sticky="w", pady=(10, 2), padx=5)
+
+        # 1 a 5 Estrellas
+        tk.Label(fields_frame, text="Evaluación (1 a 5 estrellas):", bg=BG_MAIN, fg=FG_TEXT, font=("Segoe UI", 9, "bold")).grid(row=1, column=0, sticky="w", pady=(10, 2), padx=5)
+        self.q_estrellas_cb = ttk.Combobox(fields_frame, values=["1", "2", "3", "4", "5"], state="readonly", width=10)
+        self.q_estrellas_cb.grid(row=1, column=1, sticky="w", pady=(10, 2), padx=5)
+
+        # Bien cocidos
+        tk.Label(fields_frame, text="¿Los alimentos estaban bien cocidos?:", bg=BG_MAIN, fg=FG_TEXT, font=("Segoe UI", 9, "bold")).grid(row=2, column=0, sticky="w", pady=(10, 2), padx=5)
+        self.q_cocidos_ent = tk.Entry(fields_frame, bg=BG_INPUT, fg=FG_TEXT, insertbackground=FG_TEXT, bd=0, width=43)
+        self.q_cocidos_ent.grid(row=2, column=1, sticky="w", pady=(10, 2), padx=5)
+
+        # Porción acorde
+        tk.Label(fields_frame, text="¿La porción estaba acorde?:", bg=BG_MAIN, fg=FG_TEXT, font=("Segoe UI", 9, "bold")).grid(row=3, column=0, sticky="w", pady=(10, 2), padx=5)
+        self.q_porcion_ent = tk.Entry(fields_frame, bg=BG_INPUT, fg=FG_TEXT, insertbackground=FG_TEXT, bd=0, width=43)
+        self.q_porcion_ent.grid(row=3, column=1, sticky="w", pady=(10, 2), padx=5)
+
+        # Condimentación (solo lectura)
+        tk.Label(fields_frame, text="Condimentación de la comida:", bg=BG_MAIN, fg=FG_MUTED, font=("Segoe UI", 9, "bold")).grid(row=4, column=0, sticky="w", pady=(10, 2), padx=5)
+        self.q_condimentacion_ent = tk.Entry(fields_frame, bg=BG_CARD, fg=FG_MUTED, insertbackground=FG_TEXT, bd=0, width=43, state="disabled")
+        self.q_condimentacion_ent.grid(row=4, column=1, sticky="w", pady=(10, 2), padx=5)
+
+        # Asistir tarde
+        tk.Label(fields_frame, text="¿Asistirá después de la 01:30 pm?:", bg=BG_MAIN, fg=FG_TEXT, font=("Segoe UI", 9, "bold")).grid(row=5, column=0, sticky="w", pady=(10, 2), padx=5)
+        self.q_asistir_cb = ttk.Combobox(fields_frame, values=["Sí", "No"], state="readonly", width=10)
+        self.q_asistir_cb.grid(row=5, column=1, sticky="w", pady=(10, 2), padx=5)
+
+        # Comentario
+        tk.Label(fields_frame, text="Comentario acerca del plato:", bg=BG_MAIN, fg=FG_TEXT, font=("Segoe UI", 9, "bold")).grid(row=6, column=0, sticky="nw", pady=(10, 2), padx=5)
+        self.q_comentario_txt = scrolledtext.ScrolledText(fields_frame, bg=BG_INPUT, fg=FG_TEXT, font=("Segoe UI", 9), insertbackground=FG_TEXT, bd=0, height=4, width=40)
+        self.q_comentario_txt.grid(row=6, column=1, sticky="w", pady=(10, 2), padx=5)
+
+        # Separador y botón de guardar
+        sep = tk.Frame(scrollable_frame, height=1, bg=BG_INPUT)
+        sep.pack(fill="x", pady=15, padx=5)
+
+        btn_frame = tk.Frame(scrollable_frame, bg=BG_MAIN)
+        btn_frame.pack(fill="x", pady=5, padx=5)
+        
+        self.save_q_btn = tk.Button(btn_frame, text="💾 Guardar Respuestas", font=("Segoe UI", 10, "bold"), bg=ACCENT_GREEN, fg="#11111b", bd=0, padx=15, pady=8, cursor="hand2", activeforeground="#11111b", command=self.save_questionnaire_settings)
+        self.save_q_btn.pack(side="left")
+
+    def save_questionnaire_settings(self):
+        self.save_q_btn.configure(state="disabled")
+        self.root.update_idletasks()
+        
+        config = load_config()
+        if "questionnaire" not in config:
+            config["questionnaire"] = {}
+            
+        config["questionnaire"]["ubicacion"] = self.q_ubicacion_cb.get()
+        config["questionnaire"]["estrellas"] = self.q_estrellas_cb.get()
+        config["questionnaire"]["bien_cocidos"] = self.q_cocidos_ent.get().strip()
+        config["questionnaire"]["porcion_acorde"] = self.q_porcion_ent.get().strip()
+        # Condimentacion no se guarda porque es read-only
+        config["questionnaire"]["asistir_tarde"] = self.q_asistir_cb.get()
+        config["questionnaire"]["comentario"] = self.q_comentario_txt.get("1.0", tk.END).strip()
+        
+        save_config(config)
+        
+        self.save_q_btn.configure(state="normal")
+        logger.info("Cuestionario actualizado guardado en config.json.")
+        show_custom_success("Cuestionario Guardado", "Las respuestas para el formulario adicional se han guardado correctamente.")
+
     # --- Tab Logs ---
 
     def create_logs_tab(self):
@@ -754,9 +868,142 @@ class AppGUI:
         cleanup_frame.pack(fill="x", pady=(0, 20))
         tk.Button(cleanup_frame, text="🧹 Limpiar Todos los Registros (Logs y Evidencias)", font=("Segoe UI", 10, "bold"), bg=ACCENT_RED, fg="#11111b", bd=0, pady=8, padx=15, cursor="hand2", activebackground="#f3a8b8", activeforeground="#11111b", command=self.run_manual_cleanup).pack(side="left", fill="x", expand=True)
 
+    # --- Tab Manual de Uso ---
+
+    def create_manual_tab(self):
+        canvas = tk.Canvas(self.tab_manual, bg=BG_MAIN, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.tab_manual, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=BG_MAIN)
+
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_window, width=e.width))
+        
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Scroll con rueda del mouse
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+        # --- Título Superior y Enlace a Documentación Extensa ---
+        header_frame = tk.Frame(scrollable_frame, bg=BG_CARD, padx=15, pady=15, bd=1, highlightbackground=BG_INPUT)
+        header_frame.pack(fill="x", pady=(0, 10), padx=5)
+
+        tk.Label(header_frame, text="Manual de Configuración y Ayuda", font=("Segoe UI", 14, "bold"), bg=BG_CARD, fg=ACCENT).pack(anchor="w")
+        tk.Label(header_frame, text="Esta sección te guía a través de las diferentes configuraciones del bot.\nPara ver una guía aún más extensa y detallada en tu navegador, haz clic en el siguiente enlace:", bg=BG_CARD, fg=FG_TEXT, justify="left").pack(anchor="w", pady=(5, 10))
+
+        doc_btn = tk.Button(header_frame, text="🌐 Abrir Documentación Extensa (/manual)", font=("Segoe UI", 10, "bold"), bg=ACCENT_BLUE, fg="#11111b", bd=0, padx=15, pady=6, cursor="hand2", activeforeground="#11111b", command=lambda: subprocess.run(["cmd", "/c", "start", "http://127.0.0.1:18293/manual"]))
+        doc_btn.pack(anchor="w")
+        doc_btn.bind("<Enter>", lambda e: doc_btn.configure(bg="#74c7ec"))
+        doc_btn.bind("<Leave>", lambda e: doc_btn.configure(bg=ACCENT_BLUE))
+
+        # Almacén de referencias de imágenes para evitar garbage collection
+        self.manual_img_refs = {}
+
+        # Definir las secciones del manual
+        sections = [
+            {
+                "title": "1. Panel de Control (Sidebar)",
+                "desc": "El panel lateral izquierdo (Sidebar) te muestra el estado en tiempo real del servicio (ACTIVO / INACTIVO) y el resultado del último pedido. Además, contiene los botones de acción rápida:\n"
+                        "• Alternar Estado: Pausa o reactiva el planificador diario.\n"
+                        "• Cancelar Solicitud: Cancela el almuerzo solicitado del día actual (máximo 3 cancelaciones diarias para evitar bloqueos).\n"
+                        "• Check de Cancelación: Muestra el estatus de cancelación y se reinicia de manera automática a la medianoche.",
+                "image": "side_bar_panel_control.png"
+            },
+            {
+                "title": "2. Ajustes de Autenticación de SiGCA",
+                "desc": "Configura las credenciales necesarias para iniciar sesión en la intranet de SiGCA a través de Microsoft SSO:\n"
+                        "• URL del Servicio: La dirección web del portal de solicitudes.\n"
+                        "• Correo Corporativo: Tu dirección de correo de la empresa.\n"
+                        "• Contraseña(s): Puedes ingresar varias contraseñas separadas por coma en caso de expiración o rotación del sistema corporativo. El bot probará secuencialmente cada una de ellas.",
+                "image": "autenticacion_sigca.png"
+            },
+            {
+                "title": "3. Configuración de Telegram (Alertas y Consultas)",
+                "desc": "Permite al bot enviarte notificaciones directamente a tu chat personal de Telegram:\n"
+                        "• Telegram Bot Token: El token secreto proporcionado por @BotFather.\n"
+                        "• Telegram Chat ID: Tu identificador numérico de chat personal o grupal.\n"
+                        "• Botón 'Probar Telegram': Envía un mensaje instantáneo para comprobar la comunicación.",
+                "image": "telegram_config.png"
+            },
+            {
+                "title": "4. Ajustes y Preferencias del Sistema",
+                "desc": "Configura el comportamiento básico de la aplicación:\n"
+                        "• Menú Favorito: Selecciona 'Saludable' o 'Estándar' como prioridad de almuerzo.\n"
+                        "• Horario de Revisión: La hora exacta a la que deseas que el bot empiece a intentar solicitar el almuerzo diariamente.\n"
+                        "• Iniciar con Windows: Registra el bot en el Registro de Windows del usuario para cargarlo automáticamente al encender el equipo.",
+                "image": "ajustes_preferencias_sistemas.png"
+            },
+            {
+                "title": "5. Programador de Tareas de Windows",
+                "desc": "Permite registrar una tarea programada a nivel de sistema operativo:\n"
+                        "• Botón 'Registrar Tarea Diaria': Registra una tarea programada con PowerShell (solicitando elevación UAC) para iniciar el bot a la hora establecida, incluso si la GUI está cerrada.\n"
+                        "• Botón 'Eliminar Tarea': Remueve la tarea del sistema por completo de forma limpia.",
+                "image": "programar_tareas_windows.png"
+            },
+            {
+                "title": "6. Consola de Logs Integrada",
+                "desc": "Una consola visual en tiempo real que refleja las operaciones internas del bot. Las líneas se colorean según la importancia del evento:\n"
+                        "• Celeste (INFO): Operaciones cotidianas y de confirmación.\n"
+                        "• Amarillo (WARNING): Advertencias leves o problemas temporales.\n"
+                        "• Rojo (ERROR/CRITICAL): Errores fatales o problemas de red.",
+                "image": "console_log_section.png"
+            },
+            {
+                "title": "7. Monitoreo de Salud & API",
+                "desc": "Muestra los detalles de integración con servicios externos y mantenimiento local:\n"
+                        "• URL del Health Check: Endpoint en formato JSON para monitorización técnica remota.\n"
+                        "• Dashboard Visual: Enlace web local (http://127.0.0.1:18293/) que carga los logs y la última evidencia fotográfica en tu navegador.\n"
+                        "• Botones de Mantenimiento: Accesos directos para abrir la carpeta de evidencias físicas o limpiar registros viejos.",
+                "image": "seccion_salud_api.png"
+            },
+            {
+                "title": "8. Botones de Acción del Sistema",
+                "desc": "Ubicados en la parte inferior de la pestaña de configuración, permiten realizar acciones inmediatas:\n"
+                        "• Guardar Configuración: Guarda y actualiza las variables de entorno (.env y config.json) y recarga el bot.\n"
+                        "• Simular Pedido (Dry Run): Navega e interactúa en el navegador con Playwright, pero no efectúa el clic final de confirmación del pedido. Sirve para validar credenciales.\n"
+                        "• Solicitud Manual: Salta todas las validaciones de horario y ejecuta inmediatamente una orden real.",
+                "image": "botones_del_sistema.png"
+            }
+        ]
+
+        # Crear los widgets por sección
+        for idx, sec in enumerate(sections):
+            sec_frame = tk.LabelFrame(scrollable_frame, text=f" {sec['title']} ", font=("Segoe UI", 10, "bold"), bg=BG_MAIN, fg=ACCENT, padx=15, pady=15, bd=1, highlightbackground=BG_INPUT)
+            sec_frame.pack(fill="x", pady=10, padx=5)
+
+            # Texto descriptivo
+            desc_lbl = tk.Label(sec_frame, text=sec['desc'], font=("Segoe UI", 9), fg=FG_TEXT, bg=BG_MAIN, justify="left", anchor="w", wraplength=700)
+            desc_lbl.pack(fill="x", pady=(0, 10))
+
+            # Imagen de soporte
+            img_name = sec['image']
+            img_path = get_asset_path(os.path.join("images_info", img_name))
+
+            if os.path.exists(img_path):
+                try:
+                    img = Image.open(img_path)
+                    photo = ImageTk.PhotoImage(img)
+                    self.manual_img_refs[img_name] = photo # Evitar que sea basura
+
+                    img_lbl = tk.Label(sec_frame, image=photo, bg=BG_MAIN)
+                    img_lbl.pack(anchor="w", pady=5)
+                except Exception as e:
+                    logger.error(f"Error al cargar imagen del manual {img_name}: {e}")
+                    err_lbl = tk.Label(sec_frame, text=f"⚠️ No se pudo renderizar la captura: {img_name}", font=("Segoe UI", 9, "italic"), fg=ACCENT_RED, bg=BG_MAIN)
+                    err_lbl.pack(anchor="w", pady=5)
+            else:
+                err_lbl = tk.Label(sec_frame, text=f"⚠️ Captura ausente: {img_name} (Ruta: {img_path})", font=("Segoe UI", 9, "italic"), fg=ACCENT_YELLOW, bg=BG_MAIN)
+                err_lbl.pack(anchor="w", pady=5)
+
     # ------------------------------------------------------------------
     # Acciones e Interacciones
     # ------------------------------------------------------------------
+
 
     def toggle_password_visibility(self):
         if self.pass_visible:
@@ -827,6 +1074,27 @@ class AppGUI:
         status = load_status()
         self.startup_var.set(status.get("startup_on_boot", False))
         self.cancelled_var.set(status.get("is_cancelled_today", False))
+
+        # Cargar cuestionario
+        q_config = config.get("questionnaire", {})
+        self.q_ubicacion_cb.set(q_config.get("ubicacion", "Sede ExCle"))
+        self.q_estrellas_cb.set(q_config.get("estrellas", "3"))
+        
+        self.q_cocidos_ent.delete(0, tk.END)
+        self.q_cocidos_ent.insert(0, q_config.get("bien_cocidos", "last"))
+        
+        self.q_porcion_ent.delete(0, tk.END)
+        self.q_porcion_ent.insert(0, q_config.get("porcion_acorde", "last"))
+        
+        self.q_condimentacion_ent.configure(state="normal")
+        self.q_condimentacion_ent.delete(0, tk.END)
+        self.q_condimentacion_ent.insert(0, str(q_config.get("condimentacion", 1)))
+        self.q_condimentacion_ent.configure(state="disabled")
+        
+        self.q_asistir_cb.set(q_config.get("asistir_tarde", "Sí"))
+        
+        self.q_comentario_txt.delete("1.0", tk.END)
+        self.q_comentario_txt.insert(tk.END, q_config.get("comentario", "Favor quitar el jugo de melon y las porciones no tienen suficiente proteina, quedando uno con hambre"))
 
     def show_loading(self, text):
         self.loading_lbl.configure(text=text)
@@ -934,19 +1202,20 @@ class AppGUI:
             show_custom_error("Dry-Run Fallido", f"La simulación reportó un fallo:\n\n{msg}")
 
     def run_manual_order(self):
-        self.show_loading("Iniciando solicitud manual de almuerzo. Por favor espera...")
-        logger.info("Iniciando solicitud manual...")
+        if show_custom_confirm("Solicitud Manual", "¿Deseas forzar la ejecución del pedido AHORA MISMO?\n\nEsto ignorará cualquier cancelación previa que hayas hecho hoy."):
+            self.show_loading("Iniciando solicitud manual de almuerzo. Por favor espera...")
+            logger.info("Iniciando solicitud manual...")
 
-        def run_manual_thread():
-            try:
-                bot = LunchBot()
-                bot.is_time_valid = lambda *args, **kwargs: True
-                exit_code, msg, evidence = bot.run_automation(dry_run=False, is_manual=True)
-                self.root.after(0, lambda: self._finish_manual_order(exit_code, msg, evidence))
-            except Exception as e:
-                self.root.after(0, lambda: self._finish_manual_order(5, f"Excepción crítica durante la solicitud: {e}", None))
+            def run_manual_thread():
+                try:
+                    bot = LunchBot()
+                    bot.is_time_valid = lambda *args, **kwargs: True
+                    exit_code, msg, evidence = bot.run_automation(dry_run=False, is_manual=True)
+                    self.root.after(0, lambda: self._finish_manual_order(exit_code, msg, evidence))
+                except Exception as e:
+                    self.root.after(0, lambda: self._finish_manual_order(5, f"Excepción crítica durante la solicitud: {e}", None))
 
-        threading.Thread(target=run_manual_thread, daemon=True).start()
+            threading.Thread(target=run_manual_thread, daemon=True).start()
 
     def _finish_manual_order(self, exit_code, msg, evidence):
         self.hide_loading()
@@ -985,10 +1254,6 @@ class AppGUI:
                 self.root.after(0, lambda: self._finish_cancel_lunch(5, f"Excepción crítica durante la cancelación: {e}", None))
 
         threading.Thread(target=run_cancel_thread, daemon=True).start()
-
-    def run_manual_order(self):
-        if show_custom_confirm("Solicitud Manual", "¿Deseas forzar la ejecución del pedido AHORA MISMO?\n\nEsto ignorará cualquier cancelación previa que hayas hecho hoy."):
-            threading.Thread(target=self._run_bot_manual_thread, daemon=True).start()
 
     def run_manual_cleanup(self):
         if show_custom_confirm("Limpiar Registros", "¿Estás seguro de que deseas eliminar permanentemente todas las evidencias y logs antiguos?\n\nEsta acción no se puede deshacer."):

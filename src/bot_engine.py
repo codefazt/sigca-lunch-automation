@@ -597,27 +597,40 @@ class LunchBot:
                     # --- Rellenar campos condicionales si existen ---
                     logger.info("Verificando existencia de campos del formulario adicional...")
 
+                    # Cargar configuración del cuestionario
+                    q_config = self.config.get("questionnaire", {})
+                    ubicacion_val = q_config.get("ubicacion", "Sede ExCle")
+                    estrellas_val = q_config.get("estrellas", "3")
+                    bien_cocidos_val = q_config.get("bien_cocidos", "last")
+                    porcion_acorde_val = q_config.get("porcion_acorde", "last")
+                    condimentacion_val = q_config.get("condimentacion", 1)
+                    asistir_tarde_val = q_config.get("asistir_tarde", "Sí")
+                    comentario_val = q_config.get("comentario", "Favor quitar el jugo de melon y las porciones no tienen suficiente proteina, quedando uno con hambre")
+
                     if page.get_by_text("Ubicación", exact=False).count() > 0:
-                        self.fill_form_field(page, "Ubicación", "select", "Sede ExCle")
+                        self.fill_form_field(page, "Ubicación", "select", ubicacion_val)
 
                     if page.get_by_text("De 1 a 5 estrellas", exact=False).count() > 0:
-                        self.fill_form_field(page, "De 1 a 5 estrellas", "radio", "3")
+                        self.fill_form_field(page, "De 1 a 5 estrellas", "radio", estrellas_val)
 
                     if page.get_by_text("bien cocidos", exact=False).count() > 0:
-                        self.fill_form_field(page, "bien cocidos", "select", "last")
+                        self.fill_form_field(page, "bien cocidos", "select", bien_cocidos_val)
 
                     if page.get_by_text("porción estaba acorde", exact=False).count() > 0:
-                        self.fill_form_field(page, "porción estaba acorde", "select", "last")
+                        self.fill_form_field(page, "porción estaba acorde", "select", porcion_acorde_val)
 
                     if page.get_by_text("condimentación de la comida", exact=False).count() > 0:
-                        self.fill_form_field(page, "condimentación de la comida", "select", 1)
+                        try:
+                            cond_val = int(condimentacion_val)
+                        except ValueError:
+                            cond_val = condimentacion_val
+                        self.fill_form_field(page, "condimentación de la comida", "select", cond_val)
 
                     if page.get_by_text("asistir después de la 01:30", exact=False).count() > 0:
-                        self.fill_form_field(page, "asistir después de la 01:30", "radio", "Sí")
+                        self.fill_form_field(page, "asistir después de la 01:30", "radio", asistir_tarde_val)
 
                     if page.get_by_text("comentario acerca del plato", exact=False).count() > 0:
-                        comment_text = "Favor quitar el jugo de melon y las porciones no tienen suficiente proteina, quedando uno con hambre"
-                        self.fill_form_field(page, "comentario acerca del plato", "text", comment_text)
+                        self.fill_form_field(page, "comentario acerca del plato", "text", comentario_val)
 
                     self.capture_evidence(page, "form_filled")
 
