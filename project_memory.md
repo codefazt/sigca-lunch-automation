@@ -47,6 +47,18 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
 - **Modales Premium Integrados:** Implementación del estilo Catppuccin para notificaciones internas de primer plano con un borde de `2px` que indica severidad (`ACCENT_BLUE` para información, `ACCENT_GREEN` para éxito, `ACCENT_YELLOW` para alertas, `ACCENT_RED` para errores) e interactividad con efectos hover dinámicos en los botones.
 - **Notificaciones Toast Windows:** Los Toasts se reservan para notificaciones en segundo plano, siempre envueltos en bloques robustos de excepciones.
 
+### 8. Optimizaciones, Seguridad y Cuestionario Dinámico
+- 🎯 Hitos Recientes Completados:
+1. **Verificación de Dependencias y Auto-Reparación (v2.2.0):** Implementación de una rutina ligera de inicio que comprueba la existencia de Chromium y dependencias en un máximo de 8 segundos. En caso de fallos (C++ DLLs faltantes, Antivirus o navegador no instalado), lanza un modal interactivo para descargar o instalar automáticamente los componentes necesarios sin que la app crashee.
+2. **Ejecución Fuera de Proceso (Subprocesos):** Desacoplamiento de las rutinas de Playwright (Dry Run, Solicitud Manual y Cancelación) del proceso principal mediante `subprocess.Popen`. Esto erradica los bloqueos (deadlocks) en Tkinter y libera la memoria de forma garantizada tras la finalización, ya que el sistema operativo mata físicamente los procesos Chromium/Node (con limpieza forzada tras timeout de 30s).
+3. **Botón de Parada Forzada:** Implementación de un botón de aborto en el panel lateral que detiene inmediatamente el subproceso actual e invoca la limpieza de cualquier proceso huérfano de Playwright.
+4. **Cuestionario Dinámico (v2.1.0):** Los usuarios pueden definir las respuestas fijas a las preguntas dinámicas de ubicación, guarnición, nivel de cocción, etc., directamente desde una pestaña "Cuestionario" en la GUI, persistiendo en `config.json`.
+5. **Encriptación Segura de Credenciales:** En lugar de guardar la contraseña en texto plano en la GUI, ahora se aplica una ofuscación base64 (reversible) en `.env` para añadir una capa adicional de protección frente a mirones.
+6. **Notificaciones Asíncronas e Hilos Separados:**
+   - La subida de capturas y envío de mensajes a Telegram ahora corren asíncronamente.
+   - Tkinter maneja todas las llamadas UI usando colas y variables compartidas (`app_gui.py` desacoplado de la lógica bloqueante).
+7. **Resolución de Error de Consola en Windows (.exe):** Se configuró explícitamente `encoding='utf-8'` y manejo de excepciones en todos los comandos de stdout para que el empaquetado `console=False` no crashee en sistemas Windows en español (cp1252).
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
@@ -71,4 +83,12 @@ A continuación, se detallan los fallos históricos encontrados en el desarrollo
 
 ### 5. Botón de Pedido No Encontrado en Playwright
 * **Fallo:** En ocasiones se arrojaba un error de tipo `No se pudo identificar el botón o formulario de pedido de almuerzo en la página.` porque la página cambiaba dinámicamente o el selector no coincidía con las clases CSS de Angular que cambian al compilar el frontend corporativo.
-* **Solución:** Se actualizó `fill_form_field` en [src/bot_engine.py](file:///c:/Users/Administrador/Desktop/python/solicitud_almuerzo_auto/src/bot_engine.py) para buscar contenedores mediante patrones de texto libre (`:has-text(...)`) e inspeccionar múltiples tags alternativos (`select`, `input`, `fieldset`, `div`), garantizando compatibilidad ante cambios menores en el DOM de la aplicación web.
+* **Solución:** Se actualizó `fill_form_field` en `src/bot_engine.py` para buscar contenedores mediante patrones de texto libre (`:has-text(...)`) e inspeccionar múltiples tags alternativos (`select`, `input`, `fieldset`, `div`), garantizando compatibilidad ante cambios menores en el DOM de la aplicación web.
+
+### 6. Congelamiento por Modales (Deadlock en Tkinter)
+* **Fallo:** La GUI se congelaba (deadlock) y no respondía al pulsar botones que lanzaban modales debido al uso de `self.wait_window()` en el constructor de `PremiumMessageBox` y `PremiumConfirmBox`.
+* **Solución:** Se removió `self.wait_window()` de los constructores y se delegó la responsabilidad al llamador externo, evitando bloquear el bucle principal de eventos.
+
+### 7. Error del Codificador 'charmap' de Windows (Emojis)
+* **Fallo:** El registro de eventos con emojis generaba `UnicodeEncodeError` en la consola de Windows (que usa codificación CP1252), provocando el colapso de la aplicación.
+* **Solución:** Se forzó a `sys.stdout` y `sys.stderr` a usar codificación UTF-8 con la política de reemplazo `errors="backslashreplace"` para imprimir emojis y caracteres especiales de forma segura.
