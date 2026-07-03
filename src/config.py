@@ -67,8 +67,21 @@ os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(
 # Redirigir stdout/stderr si no están disponibles (pythonw / PyInstaller --noconsole)
 if sys.stdout is None:
     sys.stdout = open(os.devnull, 'w')
+else:
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+        except Exception:
+            pass
+
 if sys.stderr is None:
     sys.stderr = open(os.devnull, 'w')
+else:
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
+        except Exception:
+            pass
 
 # ---------------------------------------------------------------------------
 # Directorios Base
