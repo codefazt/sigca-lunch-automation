@@ -27,3 +27,8 @@ evidence/*
 *.njsproj
 *.sln
 *.swp
+
+# Build artifacts
+build/
+dist/
+*.spec
