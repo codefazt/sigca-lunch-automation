@@ -113,11 +113,19 @@ tray_icon = None
 # ---------------------------------------------------------------------------
 
 def append_log_gui(msg, level):
-    """Inserta una línea de log en el widget ScrolledText de la consola."""
+    """Inserta una línea de log en el widget ScrolledText de la consola.
+    Recorta automáticamente las líneas más antiguas para evitar fugas de memoria."""
     if app and app.log_text:
         app.log_text.configure(state="normal")
         tag = level.lower()
         app.log_text.insert("end", msg + "\n", tag)
+
+        # Limitar a 500 líneas para evitar congelamiento de la GUI por acumulación
+        MAX_LOG_LINES = 500
+        line_count = int(app.log_text.index("end-1c").split(".")[0])
+        if line_count > MAX_LOG_LINES:
+            app.log_text.delete("1.0", f"{line_count - MAX_LOG_LINES}.0")
+
         app.log_text.configure(state="disabled")
         app.log_text.see("end")
 

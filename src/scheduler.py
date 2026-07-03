@@ -83,64 +83,75 @@ def start_scheduler(gui_update_callback=None):
     Args:
         gui_update_callback: Función opcional para refrescar la GUI.
     """
-    logger.info("Hilo Planificador iniciado. Buscando ventana horaria 3:30 PM - 9:59 AM.")
+    logger.info("Hilo Planificador iniciado. Buscando ventana horaria configurada.")
     while not state.stop_threads:
-        status_info = load_status()
-        
-        # --- Limpieza automática semanal ---
-        last_cleanup_str = status_info.get("last_cleanup_date", "")
-        today_date = datetime.now()
-        needs_cleanup = False
-        
-        if not last_cleanup_str:
-            needs_cleanup = True
-        else:
-            try:
-                last_cleanup = datetime.strptime(last_cleanup_str, "%Y-%m-%d")
-                if (today_date - last_cleanup).days >= 7:
-                    needs_cleanup = True
-            except Exception:
+        try:
+            status_info = load_status()
+            
+            # --- Limpieza automática semanal ---
+            last_cleanup_str = status_info.get("last_cleanup_date", "")
+            today_date = datetime.now()
+            needs_cleanup = False
+            
+            if not last_cleanup_str:
                 needs_cleanup = True
-                
-        if needs_cleanup:
-            try:
-                from src.cleanup import clean_old_logs_and_evidence
-                clean_old_logs_and_evidence(days=7)
-                # Recargar status ya que cleanup.py lo modificó
-                status_info = load_status()
-            except Exception as e:
-                logger.error(f"Error durante la limpieza automática semanal: {e}")
-        # -----------------------------------
+            else:
+                try:
+                    last_cleanup = datetime.strptime(last_cleanup_str, "%Y-%m-%d")
+                    if (today_date - last_cleanup).days >= 7:
+                        needs_cleanup = True
+                except Exception:
+                    needs_cleanup = True
+                    
+            if needs_cleanup:
+                try:
+                    from src.cleanup import clean_old_logs_and_evidence
+                    clean_old_logs_and_evidence(days=7)
+                    # Recargar status ya que cleanup.py lo modificó
+                    status_info = load_status()
+                except Exception as e:
+                    logger.error(f"Error durante la limpieza automática semanal: {e}")
+            # -----------------------------------
 
-        if status_info.get("is_active", True) and not status_info.get("is_cancelled_today", False):
-            # Comprobar si ya se ejecutó con éxito hoy
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            if status_info.get("last_successful_run") != today_str:
+            if status_info.get("is_active", True) and not status_info.get("is_cancelled_today", False):
+                # Comprobar si ya se ejecutó con éxito hoy
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                if status_info.get("last_successful_run") != today_str:
 
-                config = load_config()
-                retry_delay = config.get("retry_delay_sec", 300)
+                    config = load_config()
+                    retry_delay = config.get("retry_delay_sec", 300)
 
-                # Comprobar cuándo fue la última ejecución (para delay de reintentos)
-                last_run_str = status_info.get("last_run_timestamp", "")
-                should_run = True
+                    # Comprobar cuándo fue la última ejecución (para delay de reintentos)
+                    last_run_str = status_info.get("last_run_timestamp", "")
+                    should_run = True
 
-                if last_run_str and last_run_str != "Nunca":
-                    try:
-                        last_run_time = datetime.strptime(last_run_str, "%Y-%m-%d %H:%M:%S")
-                        elapsed = (datetime.now() - last_run_time).total_seconds()
-                        if elapsed < retry_delay:
-                            should_run = False
-                    except Exception:
-                        pass
+                    if last_run_str and last_run_str != "Nunca":
+                        try:
+                            last_run_time = datetime.strptime(last_run_str, "%Y-%m-%d %H:%M:%S")
+                            elapsed = (datetime.now() - last_run_time).total_seconds()
+                            if elapsed < retry_delay:
+                                should_run = False
+                        except Exception:
+                            pass
 
-                if should_run:
-                    try:
-                        bot_checker = LunchBot()
-                        if bot_checker.is_time_valid():
+                    if should_run:
+                        # Verificar ventana horaria directamente sin crear LunchBot
+                        from datetime import time as dt_time
+                        current_t = datetime.now().time()
+                        start_t = dt_time(config.get("start_hour", 15), config.get("start_minute", 30))
+                        end_t = dt_time(config.get("end_hour", 10), config.get("end_minute", 0))
+
+                        if start_t <= end_t:
+                            time_valid = start_t <= current_t < end_t
+                        else:
+                            # Ventana que cruza la medianoche (ej. 3:30 PM a 9:59 AM)
+                            time_valid = current_t >= start_t or current_t < end_t
+
+                        if time_valid:
                             logger.info("Se detectó ventana horaria activa y almuerzo pendiente. Iniciando Job de Almuerzo...")
                             run_lunch_automation_job(dry_run=False, gui_update_callback=gui_update_callback)
-                    except Exception as e:
-                        logger.error(f"Error en chequeo de planificación: {e}")
+        except Exception as e:
+            logger.error(f"Error en ciclo del planificador: {e}")
 
         # Esperar 60 segundos antes del siguiente chequeo
         time.sleep(60)

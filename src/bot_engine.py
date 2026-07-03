@@ -63,7 +63,7 @@ class LunchBot:
 
     def load_config(self):
         """Carga parámetros operativos desde config.json."""
-        logger.info(f"Cargando configuración desde {self.config_path}")
+        logger.debug(f"Cargando configuración desde {self.config_path}")
         if os.path.exists(self.config_path):
             with open(self.config_path, "r", encoding="utf-8") as f:
                 self.config = json.load(f)

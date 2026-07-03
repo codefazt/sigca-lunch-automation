@@ -25,16 +25,26 @@ def start_telegram_poller():
     last_update_id = 0
     logger.info("Hilo Telegram Poller iniciado para escuchar comandos de salud (/status, /health).")
 
-    while not state.stop_threads:
-        env = load_env_dict()
-        token = env.get("TELEGRAM_TOKEN")
-        allowed_chat_id = env.get("TELEGRAM_CHAT_ID")
+    # Cachear credenciales para no leer .env cada 4 segundos
+    _cached_token = None
+    _cached_chat_id = None
+    _last_env_read = 0
+    ENV_CACHE_TTL = 60  # Releer .env cada 60 segundos como máximo
 
-        if not token or not allowed_chat_id:
+    while not state.stop_threads:
+        # Releer credenciales solo cada ENV_CACHE_TTL segundos
+        now = time.time()
+        if now - _last_env_read > ENV_CACHE_TTL:
+            env = load_env_dict()
+            _cached_token = env.get("TELEGRAM_TOKEN")
+            _cached_chat_id = env.get("TELEGRAM_CHAT_ID")
+            _last_env_read = now
+
+        if not _cached_token or not _cached_chat_id:
             time.sleep(10)
             continue
 
-        url = f"https://api.telegram.org/bot{token}/getUpdates?offset={last_update_id + 1}&timeout=5"
+        url = f"https://api.telegram.org/bot{_cached_token}/getUpdates?offset={last_update_id + 1}&timeout=5"
         try:
             req = urllib.request.Request(url)
             with urllib.request.urlopen(req, timeout=8) as response:
@@ -49,7 +59,7 @@ def start_telegram_poller():
                         chat = message.get("chat")
                         text = message.get("text", "").strip()
 
-                        if chat and str(chat.get("id")) == str(allowed_chat_id):
+                        if chat and str(chat.get("id")) == str(_cached_chat_id):
                             if text in ["/status", "/health"]:
                                 status_info = load_status()
                                 bot_state = "ACTIVO ✅" if status_info.get("is_active", True) else "PAUSADO ⏸️"
@@ -63,7 +73,7 @@ def start_telegram_poller():
                                     f"- <b>Resultado:</b> {html.escape(last_status)}\n\n"
                                     f"Servidor Health Check disponible localmente."
                                 )
-                                send_telegram_message(token, allowed_chat_id, response_msg)
+                                send_telegram_message(_cached_token, _cached_chat_id, response_msg)
         except Exception:
             pass  # Silenciar fallos de conexión temporales
 
