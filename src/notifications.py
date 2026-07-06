@@ -6,7 +6,6 @@ y mensajes/fotos a Telegram vía la API HTTP directa.
 
 import os
 import logging
-import subprocess
 import urllib.request
 import urllib.parse
 import uuid
@@ -19,52 +18,28 @@ logger = logging.getLogger("SiGCABot")
 
 def send_windows_toast(title, message):
     """
-    Envía una notificación Toast nativa de Windows 10/11.
-    Intenta primero el sistema WinRT moderno; si falla, usa Balloon Notification heredada.
+    Envía una notificación Toast nativa de Windows 10/11 usando la librería plyer.
+    Evita abrir subprocesos de powershell.exe que levantan alarmas en antivirus (heurística).
     """
-    logger.info(f"Enviando notificación Toast de Windows: {title} - {message}")
-    escaped_title = title.replace("'", "''")
-    escaped_message = message.replace("'", "''")
-
-    # Intento principal: WinRT Toast Notification (Windows 10/11 nativo)
-    powershell_cmd = f"""
-    [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-    $Template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-    $RawXml = [xml]$Template.GetXml()
-    $TextNodes = $RawXml.GetElementsByTagName('text')
-    $TextNodes.Item(0).InnerText = '{escaped_title}'
-    $TextNodes.Item(1).InnerText = '{escaped_message}'
-    $Xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-    $Xml.LoadXml($RawXml.OuterXml)
-    $Toast = New-Object Windows.UI.Notifications.ToastNotification $Xml
-    [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('SiGCABot').Show($Toast)
-    """
+    logger.info(f"Enviando notificación Toast de Windows (plyer): {title} - {message}")
     try:
-        res = subprocess.run(
-            ["powershell", "-Command", powershell_cmd],
-            capture_output=True, text=True, timeout=10
+        from plyer import notification
+        
+        # Determinar icono (.ico)
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        icon_path = os.path.join(base_dir, "robot_hamburger_icon.ico")
+        if not os.path.exists(icon_path):
+            icon_path = None
+            
+        notification.notify(
+            title=title,
+            message=message,
+            app_name="SiGCABot",
+            app_icon=icon_path,
+            timeout=7
         )
-        if res.returncode != 0:
-            raise RuntimeError(res.stderr)
     except Exception as e:
-        logger.warning(f"Fallo al enviar Toast nativo (WinRT): {e}. Usando fallback heredado Balloon Notification...")
-        fallback_cmd = f"""
-        [void][System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms')
-        $notification = New-Object System.Windows.Forms.NotifyIcon
-        $notification.Icon = [System.Drawing.SystemIcons]::Information
-        $notification.BalloonTipIcon = 'Info'
-        $notification.BalloonTipTitle = '{escaped_title}'
-        $notification.BalloonTipText = '{escaped_message}'
-        $notification.Visible = $True
-        $notification.ShowBalloonTip(7000)
-        """
-        try:
-            subprocess.run(
-                ["powershell", "-Command", fallback_cmd],
-                capture_output=True, text=True, timeout=10
-            )
-        except Exception as fe:
-            logger.warning(f"Fallo al enviar Balloon Notification fallback: {fe}")
+        logger.warning(f"Fallo al enviar notificación con plyer: {e}")
 
 # ---------------------------------------------------------------------------
 # Notificaciones por Telegram — Mensajes de texto

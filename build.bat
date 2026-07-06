@@ -86,6 +86,15 @@ if errorlevel 1 (
 
 :: Limpiar build anterior
 echo [2/5] Limpiando compilaciones anteriores...
+if exist "dist\SiGCABot_Release\.env" (
+    echo [INFO] Respaldando archivo .env de prueba...
+    copy /y "dist\SiGCABot_Release\.env" "dist\.env.bak" >nul
+)
+if exist "dist\SiGCABot_Release\config.json" (
+    echo [INFO] Respaldando archivo config.json de prueba...
+    copy /y "dist\SiGCABot_Release\config.json" "dist\config.json.bak" >nul
+)
+
 if exist "build" rmdir /s /q "build"
 if exist "dist\SiGCABot_Release" rmdir /s /q "dist\SiGCABot_Release"
 
@@ -123,8 +132,26 @@ mkdir "dist\SiGCABot_Release\logs" 2>nul
 mkdir "dist\SiGCABot_Release\evidence" 2>nul
 
 
-:: Crear config.json por defecto
-echo {"start_hour": 15, "start_minute": 30, "end_hour": 10, "end_minute": 0, "timeout_ms": 30000, "headless": true, "retries": 3, "retry_delay_sec": 300, "prefer_menu": "saludable"} > "dist\SiGCABot_Release\config.json"
+:: Restaurar configuraciones respaldadas si existen
+if exist "dist\.env.bak" (
+    echo [INFO] Restaurando archivo .env respaldado...
+    copy /y "dist\.env.bak" "dist\SiGCABot_Release\.env" >nul
+    del /f /q "dist\.env.bak"
+)
+if exist "dist\config.json.bak" (
+    echo [INFO] Restaurando archivo config.json respaldado...
+    copy /y "dist\config.json.bak" "dist\SiGCABot_Release\config.json" >nul
+    del /f /q "dist\config.json.bak"
+)
+
+:: Firmar digitalmente el ejecutable de forma gratuita
+if exist "sign_app.ps1" (
+    echo [INFO] Iniciando el proceso de firma digital...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "sign_app.ps1"
+    if errorlevel 1 (
+        echo [WARN] El proceso de firma digital devolvio un error. El binario podria no estar firmado.
+    )
+)
 
 echo.
 echo [5/5] Compilacion completada exitosamente!

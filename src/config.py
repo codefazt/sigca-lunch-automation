@@ -88,10 +88,20 @@ else:
 # ---------------------------------------------------------------------------
 
 if getattr(sys, 'frozen', False):
-    # Ejecutable empaquetado: datos del usuario junto al .exe
-    BASE_DIR = os.path.dirname(sys.executable)
     # Recursos estáticos internos empaquetados por PyInstaller
     ASSET_DIR = sys._MEIPASS
+    # Ejecutable empaquetado: determinar si usamos modo portable (al lado del exe)
+    # o modo persistente (en la carpeta AppData del usuario).
+    exe_dir = os.path.dirname(sys.executable)
+    if os.path.exists(os.path.join(exe_dir, "config.json")) or os.path.exists(os.path.join(exe_dir, ".env")):
+        BASE_DIR = exe_dir
+        logger.info(f"Modo portable detectado. Usando directorio del ejecutable: {BASE_DIR}")
+    else:
+        # Modo persistente por defecto
+        appdata_dir = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "SiGCABot")
+        os.makedirs(appdata_dir, exist_ok=True)
+        BASE_DIR = appdata_dir
+        logger.info(f"Modo persistente activado. Usando directorio AppData: {BASE_DIR}")
 else:
     # Desarrollo: el directorio raíz del proyecto (padre de src/)
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -100,6 +110,17 @@ else:
 ENV_PATH = os.path.join(BASE_DIR, ".env")
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 STATUS_PATH = os.path.join(BASE_DIR, "status.json")
+
+# Inicializar archivos por defecto en BASE_DIR si no existen
+if not os.path.exists(ENV_PATH):
+    template_path = os.path.join(ASSET_DIR, ".env.template")
+    if os.path.exists(template_path):
+        try:
+            import shutil
+            shutil.copy(template_path, ENV_PATH)
+            logger.info(f"Archivo .env de plantilla inicializado en {ENV_PATH}")
+        except Exception as e:
+            logger.warning(f"No se pudo copiar .env.template a {ENV_PATH}: {e}")
 
 
 def get_asset_path(filename):
@@ -200,7 +221,9 @@ def load_config():
                 return json.load(f)
         except Exception:
             pass
-    return {
+            
+    # Si no existe, crear el archivo config.json por defecto en CONFIG_PATH
+    default_config = {
         "start_hour": 15,
         "start_minute": 30,
         "end_hour": 10,
@@ -220,6 +243,14 @@ def load_config():
             "comentario": "Favor quitar el jugo de melon y las porciones no tienen suficiente proteina, quedando uno con hambre"
         }
     }
+    try:
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(default_config, f, indent=2, ensure_ascii=False)
+        logger.info(f"Archivo config.json por defecto inicializado en {CONFIG_PATH}")
+    except Exception as e:
+        logger.error(f"No se pudo inicializar config.json en {CONFIG_PATH}: {e}")
+        
+    return default_config
 
 
 def save_config(data):

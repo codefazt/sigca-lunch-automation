@@ -7,13 +7,13 @@ from unittest.mock import patch, MagicMock
 # Importar la clase LunchBot
 # Usamos try/except para evitar fallas si lunch_bot aún no está completamente implementado (TDD estricto)
 try:
-    from lunch_bot import LunchBot
+    from src.bot_engine import LunchBot
 except ImportError:
     LunchBot = None
 
 
 def test_lunch_bot_class_exists():
-    assert LunchBot is not None, "La clase LunchBot debe existir en lunch_bot.py"
+    assert LunchBot is not None, "La clase LunchBot debe existir en src/bot_engine.py"
 
 
 @pytest.fixture
@@ -38,9 +38,17 @@ def mock_env(tmp_path):
       "SIGCA_URL": "https://sigca.ex-cle.com/"
     }
 
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "SIGCA_USER=johan.carmino@ex-cle.com\n"
+        "SIGCA_PASSWORDS=password1,password2\n"
+        "SIGCA_URL=https://sigca.ex-cle.com/\n"
+    )
+
     with patch.dict(os.environ, env_vars), \
-         patch("lunch_bot.CONFIG_PATH", str(config_file)):
-        parent_dir = config_file.parent
+         patch("src.config.CONFIG_PATH", str(config_file)), \
+         patch("src.config.ENV_PATH", str(env_file)), \
+         patch("src.bot_engine.CONFIG_PATH", str(config_file)):
         yield
 
 
@@ -79,21 +87,37 @@ def test_load_credentials_success(mock_env):
     assert bot.url == "https://sigca.ex-cle.com/"
 
 
-def test_load_credentials_missing_user():
+def test_load_credentials_missing_user(tmp_path):
     env_vars = {
       "SIGCA_PASSWORDS": "password1",
       "SIGCA_URL": "https://sigca.ex-cle.com/"
     }
-    with patch.dict(os.environ, env_vars, clear=True):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "SIGCA_PASSWORDS=password1\n"
+        "SIGCA_URL=https://sigca.ex-cle.com/\n"
+    )
+    with patch.dict(os.environ, env_vars, clear=True), \
+         patch("src.config.ENV_PATH", str(env_file)), \
+         patch("src.config.CONFIG_PATH", str(tmp_path / "config.json")), \
+         patch("src.bot_engine.CONFIG_PATH", str(tmp_path / "config.json")):
         with pytest.raises(ValueError, match="Falta la variable de entorno SIGCA_USER"):
             LunchBot()
 
 
-def test_load_credentials_missing_passwords():
+def test_load_credentials_missing_passwords(tmp_path):
     env_vars = {
       "SIGCA_USER": "johan.carmino@ex-cle.com",
       "SIGCA_URL": "https://sigca.ex-cle.com/"
     }
-    with patch.dict(os.environ, env_vars, clear=True):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "SIGCA_USER=johan.carmino@ex-cle.com\n"
+        "SIGCA_URL=https://sigca.ex-cle.com/\n"
+    )
+    with patch.dict(os.environ, env_vars, clear=True), \
+         patch("src.config.ENV_PATH", str(env_file)), \
+         patch("src.config.CONFIG_PATH", str(tmp_path / "config.json")), \
+         patch("src.bot_engine.CONFIG_PATH", str(tmp_path / "config.json")):
         with pytest.raises(ValueError, match="Falta la variable de entorno SIGCA_PASSWORDS"):
             LunchBot()
