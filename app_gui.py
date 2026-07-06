@@ -346,6 +346,18 @@ class PremiumMessageBox(tk.Toplevel):
         self.bind("<Return>", lambda e: self.destroy())
         self.bind("<Escape>", lambda e: self.destroy())
 
+    def destroy(self):
+        try:
+            self.grab_release()
+        except Exception:
+            pass
+        if self.master:
+            try:
+                self.master.focus_set()
+            except Exception:
+                pass
+        super().destroy()
+
     def _start_drag(self, event):
         self.drag_data["x"] = event.x
         self.drag_data["y"] = event.y
@@ -505,6 +517,18 @@ class PremiumConfirmBox(tk.Toplevel):
     def on_no(self):
         self.result = False
         self.destroy()
+
+    def destroy(self):
+        try:
+            self.grab_release()
+        except Exception:
+            pass
+        if self.master:
+            try:
+                self.master.focus_set()
+            except Exception:
+                pass
+        super().destroy()
 
     def _start_drag(self, event):
         self.drag_data["x"] = event.x
