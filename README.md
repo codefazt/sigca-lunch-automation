@@ -8,7 +8,7 @@ El proyecto combina un potente script motor de automatización web con una elega
 
 ## 🌟 Características Principales
 
-*   **Interfaz Gráfica Premium (Dark Mode):** Panel de control moderno basado en la paleta de colores *Catppuccin* oscuro. Cuenta con pestañas de configuración, cuestionario, visualizador de registros (consola de logs) y panel de monitoreo.
+*   **Interfaz Gráfica Premium (Dark Mode):** Panel de control moderno basado en la paleta de colores *Hextech Client (LoL)* oscuro. Cuenta con pestañas de configuración, cuestionario, visualizador de registros (consola de logs) y panel de monitoreo con manual de uso integrado vía web.
 *   **Automatización Web Inteligente (Playwright):** Automatiza el inicio de sesión del SSO (Single Sign-On) corporativo de Microsoft, navega a la sección de pedidos, selecciona el menú preferido (Saludable o Estándar), autocompleta encuestas/formularios adicionales opcionales y confirma la solicitud.
 *   **Cuestionario Dinámico Configurable:** Permite definir desde la interfaz (Sede, Evaluación, Comentarios y opciones específicas del plato) las respuestas predeterminadas que el bot usará para rellenar los formularios adicionales, inyectándolas en tiempo de ejecución.
 *   **Integración con el Programador de Tareas de Windows:** Registra y elimina tareas programadas directamente desde la GUI con elevación UAC automática. Detecta dinámicamente la ruta del ejecutable.

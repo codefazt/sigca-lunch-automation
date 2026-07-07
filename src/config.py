@@ -129,19 +129,19 @@ def get_asset_path(filename):
 
 
 # ---------------------------------------------------------------------------
-# Paleta de Colores Oscura Premium (Estilo Catppuccin)
+# Paleta de Colores Oscura Premium (Estilo Hextech Client - LoL)
 # ---------------------------------------------------------------------------
 
-BG_MAIN = "#1e1e2e"
-BG_CARD = "#252538"
-BG_INPUT = "#313244"
-FG_TEXT = "#cdd6f4"
-FG_MUTED = "#a6adc8"
-ACCENT = "#b4befe"
-ACCENT_GREEN = "#a6e3a1"
-ACCENT_RED = "#f38ba8"
-ACCENT_YELLOW = "#f9e2af"
-ACCENT_BLUE = "#89b4fa"
+BG_MAIN = "#010a13"        # Fondo azul marino profundo (League of Legends)
+BG_CARD = "#091428"        # Fondo de paneles y tarjetas
+BG_INPUT = "#050c14"       # Fondo de cajas de entrada
+FG_TEXT = "#f0e6d2"        # Texto dorado claro brillante
+FG_MUTED = "#a09b8c"       # Texto dorado oscuro / grisáceo
+ACCENT = "#c8aa6e"         # Oro Hextech pulido
+ACCENT_GREEN = "#0acbe6"   # Azul rúnico brillante (Éxito / Activo)
+ACCENT_RED = "#c83232"     # Rojo carmesí (Error / Parada forzada)
+ACCENT_YELLOW = "#785a28"  # Oro oscuro/bronce (Advertencia)
+ACCENT_BLUE = "#005a82"    # Azul mágico oscuro (Info)
 
 # ---------------------------------------------------------------------------
 # Thread Safety

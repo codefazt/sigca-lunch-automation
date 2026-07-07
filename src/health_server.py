@@ -108,40 +108,40 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #1e1e2e; color: #cdd6f4; font-family: 'Outfit', sans-serif; margin: 0; padding: 0; line-height: 1.6; }
+        body { background-color: #010a13; color: #f0e6d2; font-family: 'Outfit', sans-serif; margin: 0; padding: 0; line-height: 1.6; }
         .wrapper { display: flex; min-height: 100vh; }
-        .sidebar { width: 280px; background-color: #181825; border-right: 1px solid #313244; padding: 25px; box-sizing: border-box; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
-        .sidebar h2 { color: #b4befe; font-size: 1.25rem; font-weight: 800; margin-top: 0; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; }
+        .sidebar { width: 280px; background-color: #050c14; border-right: 1px solid #1e2328; padding: 25px; box-sizing: border-box; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+        .sidebar h2 { color: #c8aa6e; font-size: 1.25rem; font-weight: 800; margin-top: 0; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; }
         .sidebar ul { list-style: none; padding: 0; margin: 0; }
         .sidebar li { margin-bottom: 12px; }
-        .sidebar a { color: #a6adc8; text-decoration: none; font-size: 0.95rem; font-weight: 400; transition: color 0.2s, padding-left: 0.2s; display: block; }
-        .sidebar a:hover { color: #89b4fa; padding-left: 5px; }
+        .sidebar a { color: #a09b8c; text-decoration: none; font-size: 0.95rem; font-weight: 400; transition: color 0.2s, padding-left: 0.2s; display: block; }
+        .sidebar a:hover { color: #0acbe6; padding-left: 5px; }
         .content { flex: 1; padding: 40px; max-width: 900px; box-sizing: border-box; }
-        .header { border-bottom: 2px solid #313244; padding-bottom: 20px; margin-bottom: 40px; }
-        .header h1 { color: #b4befe; font-weight: 800; font-size: 2.2rem; margin: 0 0 10px 0; }
-        .header p { color: #a6adc8; font-size: 1.1rem; margin: 0; }
-        .section { background-color: #252538; border-radius: 12px; border: 1px solid #313244; padding: 25px; margin-bottom: 30px; }
-        .section h2 { color: #f5c2e7; margin-top: 0; font-size: 1.4rem; border-bottom: 1px solid #313244; padding-bottom: 10px; margin-bottom: 15px; }
-        .section p { color: #cdd6f4; font-size: 0.95rem; margin-bottom: 20px; }
-        .section ul { padding-left: 20px; margin-bottom: 20px; color: #a6adc8; }
+        .header { border-bottom: 2px solid #1e2328; padding-bottom: 20px; margin-bottom: 40px; }
+        .header h1 { color: #c8aa6e; font-weight: 800; font-size: 2.2rem; margin: 0 0 10px 0; }
+        .header p { color: #a09b8c; font-size: 1.1rem; margin: 0; }
+        .section { background-color: #091428; border-radius: 12px; border: 1px solid #1e2328; padding: 25px; margin-bottom: 30px; }
+        .section h2 { color: #c8aa6e; margin-top: 0; font-size: 1.4rem; border-bottom: 1px solid #1e2328; padding-bottom: 10px; margin-bottom: 15px; }
+        .section p { color: #f0e6d2; font-size: 0.95rem; margin-bottom: 20px; }
+        .section ul { padding-left: 20px; margin-bottom: 20px; color: #a09b8c; }
         .section li { margin-bottom: 8px; }
-        .section strong { color: #f5e0dc; }
-        .img-container { background-color: #1e1e2e; border: 1px solid #313244; border-radius: 8px; padding: 15px; display: inline-block; max-width: 100%; box-sizing: border-box; }
-        .img-container img { max-width: 100%; height: auto; border-radius: 4px; border: 1px solid #45475a; }
-        .sidebar a.btn-back { display: inline-block; background-color: #89b4fa; color: #11111b; text-decoration: none; font-weight: 600; padding: 10px 20px; border-radius: 8px; transition: background-color 0.2s; margin-top: 20px; text-align: center; }
-        .sidebar a.btn-back:hover { background-color: #74c7ec; color: #11111b; padding-left: 20px; }
+        .section strong { color: #f0e6d2; }
+        .img-container { background-color: #050c14; border: 1px solid #1e2328; border-radius: 8px; padding: 15px; display: inline-block; max-width: 100%; box-sizing: border-box; }
+        .img-container img { max-width: 100%; height: auto; border-radius: 4px; border: 1px solid #1e2328; }
+        .sidebar a.btn-back { display: inline-block; background-color: #005a82; color: #ffffff; text-decoration: none; font-weight: 600; padding: 10px 20px; border-radius: 8px; border: 1px solid #0acbe6; transition: background-color 0.2s; margin-top: 20px; text-align: center; }
+        .sidebar a.btn-back:hover { background-color: #0acbe6; color: #010a13; padding-left: 20px; }
         .table-container { overflow-x: auto; margin-top: 20px; }
         table { width: 100%; border-collapse: collapse; text-align: left; }
-        th, td { padding: 12px 15px; border-bottom: 1px solid #313244; font-size: 0.9rem; }
-        th { background-color: #181825; color: #b4befe; font-weight: 600; }
-        td { color: #a6adc8; }
-        code { font-family: 'JetBrains Mono', monospace; background-color: #11111b; color: #a6e3a1; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; }
+        th, td { padding: 12px 15px; border-bottom: 1px solid #1e2328; font-size: 0.9rem; }
+        th { background-color: #050c14; color: #c8aa6e; font-weight: 600; }
+        td { color: #a09b8c; }
+        code { font-family: 'JetBrains Mono', monospace; background-color: #050c14; color: #0acbe6; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; }
         
         /* Estilos de Notificaciones y popups en el manual */
-        .notification-info { border-left: 4px solid #89b4fa; background-color: #181825; padding: 15px; border-radius: 4px; margin-top: 15px; }
-        .notification-success { border-left: 4px solid #a6e3a1; background-color: #181825; padding: 15px; border-radius: 4px; margin-top: 15px; }
-        .notification-warning { border-left: 4px solid #f9e2af; background-color: #181825; padding: 15px; border-radius: 4px; margin-top: 15px; }
-        .notification-error { border-left: 4px solid #f38ba8; background-color: #181825; padding: 15px; border-radius: 4px; margin-top: 15px; }
+        .notification-info { border-left: 4px solid #0acbe6; background-color: #050c14; padding: 15px; border-radius: 4px; margin-top: 15px; }
+        .notification-success { border-left: 4px solid #0acbe6; background-color: #050c14; padding: 15px; border-radius: 4px; margin-top: 15px; }
+        .notification-warning { border-left: 4px solid #785a28; background-color: #050c14; padding: 15px; border-radius: 4px; margin-top: 15px; }
+        .notification-error { border-left: 4px solid #c83232; background-color: #050c14; padding: 15px; border-radius: 4px; margin-top: 15px; }
         
         @media (max-width: 768px) {
             .wrapper { flex-direction: column; }
@@ -361,14 +361,14 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
 
         status_data = load_status()
         active_badge = (
-            '<span class="badge badge-success">ACTIVO</span>'
+            '<span class="badge badge-success">SISTEMA ACTIVO</span>'
             if status_data.get("is_active", True)
-            else '<span class="badge badge-danger">INACTIVO</span>'
+            else '<span class="badge badge-danger">SISTEMA INACTIVO</span>'
         )
 
         # Buscar última imagen en evidence/
         evidence_dir = os.path.join(BASE_DIR, "evidence")
-        img_html = "<div style='color: #6c7086; padding: 40px; text-align: center; border: 2px dashed #313244; border-radius: 8px;'>Sin capturas disponibles</div>"
+        img_html = "<div style='color: #a09b8c; padding: 40px; text-align: center; border: 2px dashed #1e2328; border-radius: 8px; background-color: #050c14;'>Sin capturas disponibles</div>"
         last_img = "N/A"
         if os.path.exists(evidence_dir):
             files = [f for f in os.listdir(evidence_dir) if f.endswith(".png")]
@@ -390,7 +390,7 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
 
         last_run_ts = status_data.get("last_run_timestamp", "Nunca")
         last_run_status = status_data.get("last_run_status", "N/A")
-        status_color = '#a6e3a1' if last_run_status == 'success' else '#f38ba8'
+        status_color = '#0acbe6' if last_run_status == 'success' else '#c83232'
 
         html_page = f"""<!DOCTYPE html>
 <html>
@@ -400,19 +400,19 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <style>
-        body {{ background-color: #1e1e2e; color: #cdd6f4; font-family: 'Outfit', sans-serif; margin: 0; padding: 20px; }}
+        body {{ background-color: #010a13; color: #f0e6d2; font-family: 'Outfit', sans-serif; margin: 0; padding: 20px; }}
         .container {{ max-width: 1100px; margin: 0 auto; }}
-        h1 {{ color: #b4befe; font-weight: 800; margin-bottom: 5px; }}
-        .card {{ background-color: #252538; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #313244; }}
+        h1 {{ color: #c8aa6e; font-weight: 800; margin-bottom: 5px; }}
+        .card {{ background-color: #091428; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #1e2328; }}
         .grid {{ display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }}
         @media (max-width: 768px) {{ .grid {{ grid-template-columns: 1fr; }} }}
         .badge {{ padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 0.95rem; }}
-        .badge-success {{ background-color: #a6e3a1; color: #11111b; }}
-        .badge-danger {{ background-color: #f38ba8; color: #11111b; }}
-        .img-fluid {{ max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #45475a; }}
-        pre {{ background-color: #11111b; padding: 15px; border-radius: 8px; overflow-x: auto; color: #a6e3a1; font-family: Consolas, monospace; font-size: 0.85rem; max-height: 350px; white-space: pre-wrap; }}
-        .title-wrapper {{ display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #313244; padding-bottom: 15px; margin-bottom: 20px; }}
-        strong {{ color: #f5e0dc; }}
+        .badge-success {{ background-color: #0acbe6; color: #010a13; }}
+        .badge-danger {{ background-color: #c83232; color: #ffffff; }}
+        .img-fluid {{ max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #1e2328; }}
+        pre {{ background-color: #050c14; padding: 15px; border-radius: 8px; overflow-x: auto; color: #0acbe6; font-family: Consolas, monospace; font-size: 0.85rem; max-height: 350px; white-space: pre-wrap; }}
+        .title-wrapper {{ display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #1e2328; padding-bottom: 15px; margin-bottom: 20px; }}
+        strong {{ color: #f0e6d2; }}
     </style>
 </head>
 <body>
@@ -420,27 +420,27 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
         <div class="title-wrapper">
             <div>
                 <h1>SiGCA Lunch Bot Dashboard</h1>
-                <small style="color: #6c7086;">Health Check Web en vivo</small>
+                <small style="color: #a09b8c;">Health Check Web en vivo — Hextech Client</small>
             </div>
             <div>{active_badge}</div>
         </div>
         <div class="grid">
             <div>
                 <div class="card">
-                    <h2 style="color: #f5c2e7; margin-top:0; border-bottom: 1px solid #313244; padding-bottom: 8px;">Estado General</h2>
+                    <h2 style="color: #c8aa6e; margin-top:0; border-bottom: 1px solid #1e2328; padding-bottom: 8px;">Estado General</h2>
                     <p><strong>Estatus:</strong> Saludable (Funcionando)</p>
                     <p><strong>Última Ejecución:</strong> {last_run_ts}</p>
                     <p><strong>Último Resultado:</strong> <span style="color: {status_color}">{last_run_status.upper()}</span></p>
                 </div>
                 <div class="card">
-                    <h2 style="color: #89b4fa; margin-top:0; border-bottom: 1px solid #313244; padding-bottom: 8px;">Logs Recientes</h2>
+                    <h2 style="color: #0acbe6; margin-top:0; border-bottom: 1px solid #1e2328; padding-bottom: 8px;">Logs Recientes</h2>
                     <pre>{log_content}</pre>
                 </div>
             </div>
             <div>
                 <div class="card">
-                    <h2 style="color: #fab387; margin-top:0; border-bottom: 1px solid #313244; padding-bottom: 8px;">Última Captura de Evidencia</h2>
-                    <p style="color: #a6adc8; font-size: 0.9rem;">Archivo: {last_img}</p>
+                    <h2 style="color: #c8aa6e; margin-top:0; border-bottom: 1px solid #1e2328; padding-bottom: 8px;">Última Captura de Evidencia</h2>
+                    <p style="color: #a09b8c; font-size: 0.9rem;">Archivo: {last_img}</p>
                     {img_html}
                 </div>
             </div>

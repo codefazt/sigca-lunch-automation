@@ -35,13 +35,13 @@ El proyecto se divide en el script principal de entrada y un paquete de módulos
 - **Importación de Módulos:** No importes módulos de Tkinter o GUI en archivos del paquete `src/` que corran en modo CLI puro (como `bot_engine.py` o `scheduler.py`). Mantén la interfaz gráfica desacoplada de la lógica del bot.
 
 ### 2. Estilo de GUI
-- Sigue fielmente la paleta de colores oscura estilo *Catppuccin* definida en [src/config.py](file:///c:/Users/Administrador/Desktop/python/solicitud_almuerzo_auto/src/config.py):
-  - Fondo Principal (`BG_MAIN`): `#1e1e2e`
-  - Tarjetas/Paneles (`BG_CARD`): `#252538`
-  - Inputs (`BG_INPUT`): `#313244`
-  - Texto (`FG_TEXT`): `#cdd6f4`
-  - Accent (`ACCENT`): `#b4befe`
-  - Estados: Verde (`ACCENT_GREEN`), Rojo (`ACCENT_RED`), Amarillo (`ACCENT_YELLOW`), Azul (`ACCENT_BLUE`).
+- Sigue fielmente la paleta de colores oscura estilo *Hextech Client (LoL)* definida en [src/config.py](file:///c:/Users/Administrador/Desktop/python/solicitud_almuerzo_auto/src/config.py):
+  - Fondo Principal (`BG_MAIN`): `#010a13`
+  - Tarjetas/Paneles (`BG_CARD`): `#091428`
+  - Inputs (`BG_INPUT`): `#050c14`
+  - Texto (`FG_TEXT`): `#f0e6d2`
+  - Accent (`ACCENT`): `#c8aa6e`
+  - Estados: Verde/Celeste (`ACCENT_GREEN` - `#0acbe6`), Rojo (`ACCENT_RED` - `#c83232`), Amarillo/Bronce (`ACCENT_YELLOW` - `#785a28`), Azul (`ACCENT_BLUE` - `#005a82`).
 - **Diseño de Ventanas Emergentes (Popups) y Alertas:** Nunca utilices `messagebox` estándar de Tkinter. Todas las notificaciones del bot y cajas de confirmación dentro de la GUI deben heredar o instanciar `PremiumMessageBox` o `PremiumConfirmBox` con bordes exteriores de `2px` coloreados según la severidad (`ACCENT_BLUE` para información, `ACCENT_GREEN` para éxito, `ACCENT_YELLOW` para advertencias, y `ACCENT_RED` para errores) y hover dinámico en botones.
 - **Regla Anti-Deadlock de Tkinter (Modales):** Nunca utilices `self.wait_window()` dentro del constructor `__init__` de un `Toplevel` que también use `grab_set()`, ya que congelará el Hilo Principal. En su lugar, el objeto de la ventana modal debe instanciarse completamente, y la función llamadora es la responsable de invocar `parent.wait_window(dialog)`.
 
