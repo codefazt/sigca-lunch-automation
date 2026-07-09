@@ -1274,6 +1274,16 @@ class AppGUI:
         self.stop_processes_btn.pack(fill="x", padx=20, pady=(15, 4))
         self.style_button(self.stop_processes_btn, "danger")
 
+        # Botón de Actualizaciones (estático)
+        self.update_banner_btn = tk.Button(
+            self.sidebar, 
+            text="Buscar Actualización 🔄", 
+            font=("Segoe UI", 9, "bold"), 
+            command=self.trigger_manual_update_check
+        )
+        self.update_banner_btn.pack(fill="x", padx=20, pady=(4, 15))
+        self.style_button(self.update_banner_btn, "subtle")
+
         # 2. Main Panel
 
         self.main_panel = tk.Frame(self.root, bg=BG_MAIN, padx=15, pady=15)
@@ -1939,35 +1949,22 @@ class AppGUI:
             fg=ACCENT_GREEN, 
             cursor="hand2"
         )
-        # Enlazar clic en el label de versión para iniciar flujo de actualización
         self.version_lbl.bind("<Button-1>", lambda e: self.trigger_update_flow())
         
-        # 2. Agregar un banner interactivo verde brillante debajo de la versión si no está creado
-        if not hasattr(self, "update_banner_btn") or not self.update_banner_btn.winfo_exists():
-            self.update_banner_btn = tk.Button(
-                self.sidebar, 
+        # 2. Configurar el botón de actualización en modo "Actualizar Ahora"
+        if hasattr(self, "update_banner_btn") and self.update_banner_btn.winfo_exists():
+            self.update_banner_btn.configure(
                 text="Actualizar Ahora ✨", 
-                font=("Segoe UI", 8, "bold"), 
-                bg=ACCENT_BLUE, 
-                fg="#11111b", 
-                bd=0, 
-                pady=4, 
-                cursor="hand2",
                 command=self.trigger_update_flow
             )
-            # Insertar en la sidebar abajo de la versión
-            self.update_banner_btn.pack(pady=(2, 5))
-            self.update_banner_btn.bind("<Enter>", lambda e: self.update_banner_btn.configure(bg=PremiumUpdatePopup._darken(ACCENT_BLUE, 0.15)))
-            self.update_banner_btn.bind("<Leave>", lambda e: self.update_banner_btn.configure(bg=ACCENT_BLUE))
+            self.style_button(self.update_banner_btn, "magic")
 
         # 3. Mostrar el popup no invasivo en la esquina inferior derecha si no se ha mostrado en esta sesión
         if not self.update_popup_shown:
             self.update_popup_shown = True
-            # Evitar lanzar popup si la ventana principal está oculta en segundo plano (System Tray)
             if self.root.winfo_viewable():
                 PremiumUpdatePopup(self.root, version, self.trigger_update_flow)
             else:
-                # Notificación Toast de Windows nativa de forma segura si está en el Tray
                 try:
                     send_windows_toast(
                         "Actualización de SiGCABot",
@@ -1981,7 +1978,51 @@ class AppGUI:
         self.version_lbl.configure(text=f"Versión {APP_VERSION}", fg=FG_MUTED, cursor="")
         self.version_lbl.unbind("<Button-1>")
         if hasattr(self, "update_banner_btn") and self.update_banner_btn.winfo_exists():
-            self.update_banner_btn.destroy()
+            self.update_banner_btn.configure(
+                text="Buscar Actualización 🔄",
+                command=self.trigger_manual_update_check
+            )
+            self.style_button(self.update_banner_btn, "subtle")
+
+    def trigger_manual_update_check(self):
+        """Verifica de forma manual si existen actualizaciones a petición del usuario."""
+        if hasattr(self, "update_banner_btn") and self.update_banner_btn.winfo_exists():
+            self.update_banner_btn.configure(state="disabled", text="Buscando... ⏳")
+            
+        def check_thread():
+            try:
+                import src.updater as updater
+                has_update, version, url, notes = updater.check_for_update()
+                
+                def sync_ui():
+                    if hasattr(self, "update_banner_btn") and self.update_banner_btn.winfo_exists():
+                        self.update_banner_btn.configure(state="normal")
+                        
+                    if has_update:
+                        self.update_info = {
+                            "version": version,
+                            "url": url,
+                            "notes": notes
+                        }
+                        self.on_update_detected()
+                        self.trigger_update_flow()
+                    else:
+                        self.update_info = None
+                        self.on_no_update_detected()
+                        show_custom_info("Actualizaciones", f"Tu aplicación está al día (Versión {APP_VERSION}).")
+                
+                self.root.after(0, sync_ui)
+                
+            except Exception as e:
+                logger.warning(f"Error en verificación manual de actualización: {e}")
+                def error_ui():
+                    if hasattr(self, "update_banner_btn") and self.update_banner_btn.winfo_exists():
+                        self.update_banner_btn.configure(state="normal")
+                        self.on_no_update_detected()
+                    show_custom_error("Error de Actualización", f"No se pudo comprobar actualizaciones:\n{e}")
+                self.root.after(0, error_ui)
+
+        threading.Thread(target=check_thread, daemon=True).start()
 
     def trigger_update_flow(self):
         """Lanza el diálogo confirmador y procesa la descarga e instalación."""

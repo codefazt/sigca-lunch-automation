@@ -180,8 +180,17 @@ def launch_updater_script():
         restart_cmd = f'start "" "{exe_path}"'
     else:
         install_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        exe_path = os.path.join(install_dir, "app_gui.py")
         restart_cmd = 'start "" "venv\\Scripts\\python.exe" "app_gui.py"'
         
+    log_path = os.path.join(install_dir, "logs", "updater_log.txt")
+    
+    # Asegurar que existe la carpeta de logs
+    try:
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    except Exception:
+        pass
+
     bat_content = f"""@echo off
 chcp 65001 > nul
 title Actualizando SiGCABot...
@@ -190,25 +199,63 @@ echo   Instalando actualizacion de SiGCABot...
 echo   Por favor, espere un momento.
 echo ===============================================
 echo.
-echo [1/3] Esperando que se liberen los archivos...
-timeout /t 3 /nobreak > nul
-taskkill /f /im SiGCABot.exe > nul 2>&1
 
+echo [%date% %time%] Iniciando script de actualizacion... > "{log_path}"
+echo Directorio origen: "{source_dir}" >> "{log_path}"
+echo Directorio destino: "{install_dir}" >> "{log_path}"
+
+echo [1/3] Esperando que se liberen los archivos...
+echo [1/3] Esperando liberacion de archivos... >> "{log_path}"
+
+set retry=0
+:wait_loop
+taskkill /f /im SiGCABot.exe > nul 2>&1
+timeout /t 1 /nobreak > nul
+
+if not "{is_frozen}"=="True" goto copy_files
+
+:: Comprobar si el exe está bloqueado
+(type nul >> "{exe_path}") 2>nul
+if errorlevel 1 (
+    set /a retry+=1
+    echo Archivo SiGCABot.exe bloqueado. Intento %retry% de 15... >> "{log_path}"
+    if %retry% lss 15 goto wait_loop
+    echo [ERROR] Tiempo de espera agotado. El archivo sigue bloqueado. >> "{log_path}"
+    goto error_exit
+)
+
+:copy_files
 echo [2/3] Copiando nuevos archivos...
-:: Copiar desde el directorio extraido.
-:: Excluye .env, config.json y status.json para mantener credenciales y configuracion del usuario.
-robocopy "{source_dir}" "{install_dir}" /E /NJH /NJS /NDL /NC /NS /XF ".env" "config.json" "status.json"
+echo [2/3] Copiando archivos con Robocopy... >> "{log_path}"
+
+robocopy "{source_dir}" "{install_dir}" /E /NJH /NJS /NDL /NC /NS /XF ".env" "config.json" "status.json" >> "{log_path}" 2>&1
+
+:: Robocopy exit codes: 0-7 are success, >=8 are errors
+if errorlevel 8 (
+    echo [ERROR] Robocopy fallo con errorlevel %errorlevel%. >> "{log_path}"
+    goto error_exit
+)
 
 echo [3/3] Reiniciando la aplicacion...
+echo [3/3] Reiniciando aplicacion... >> "{log_path}"
 {restart_cmd}
 
 echo.
 echo Limpiando archivos temporales...
-:: Ejecuta un proceso en segundo plano para borrar la carpeta updates una vez que este script termine
+echo Limpiando archivos temporales... >> "{log_path}"
 start /b cmd /c "timeout /t 2 /nobreak > nul && rd /s /q \\"{update_dir}\\""
-
-:: Auto-eliminarse
+echo Actualizacion completada exitosamente. >> "{log_path}"
 del "%~f0"
+exit /b 0
+
+:error_exit
+echo ===============================================
+echo   [ERROR] La actualizacion fallo.
+echo   Revisa los logs en logs\\updater_log.txt
+echo ===============================================
+echo Actualizacion fallida. >> "{log_path}"
+pause
+exit /b 1
 """
     
     with open(bat_path, "w", encoding="utf-8") as f:
