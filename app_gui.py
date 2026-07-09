@@ -353,7 +353,7 @@ class PremiumMessageBox(tk.Toplevel):
             if parent and parent.winfo_viewable():
                 px, py = parent.winfo_rootx(), parent.winfo_rooty()
                 pw, ph = parent.winfo_width(), parent.winfo_height()
-                if px < -10000 or py < -10000 or px > sw or py > sh:
+                if px < -30000 or py < -30000:
                     raise ValueError
                 x = px + (pw - width) // 2
                 y = py + (ph - height) // 2
@@ -362,11 +362,8 @@ class PremiumMessageBox(tk.Toplevel):
         except Exception:
             x = (sw - width) // 2
             y = (sh - height) // 2
-
-        if x < 0 or x + width > sw:
-            x = max(0, (sw - width) // 2)
-        if y < 0 or y + height > sh:
-            y = max(0, (sh - height) // 2)
+            if x < 0: x = 0
+            if y < 0: y = 0
 
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.deiconify()
@@ -517,7 +514,7 @@ class PremiumConfirmBox(tk.Toplevel):
             if parent and parent.winfo_viewable():
                 px, py = parent.winfo_rootx(), parent.winfo_rooty()
                 pw, ph = parent.winfo_width(), parent.winfo_height()
-                if px < -10000 or py < -10000 or px > sw or py > sh:
+                if px < -30000 or py < -30000:
                     raise ValueError
                 x = px + (pw - width) // 2
                 y = py + (ph - height) // 2
@@ -526,11 +523,8 @@ class PremiumConfirmBox(tk.Toplevel):
         except Exception:
             x = (sw - width) // 2
             y = (sh - height) // 2
-
-        if x < 0 or x + width > sw:
-            x = max(0, (sw - width) // 2)
-        if y < 0 or y + height > sh:
-            y = max(0, (sh - height) // 2)
+            if x < 0: x = 0
+            if y < 0: y = 0
 
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.deiconify()
@@ -740,6 +734,8 @@ class PremiumUpdateConfirmBox(tk.Toplevel):
             if parent and parent.winfo_viewable():
                 px, py = parent.winfo_rootx(), parent.winfo_rooty()
                 pw, ph = parent.winfo_width(), parent.winfo_height()
+                if px < -30000 or py < -30000:
+                    raise ValueError
                 x = px + (pw - width) // 2
                 y = py + (ph - height) // 2
             else:
@@ -747,6 +743,8 @@ class PremiumUpdateConfirmBox(tk.Toplevel):
         except Exception:
             x = (sw - width) // 2
             y = (sh - height) // 2
+            if x < 0: x = 0
+            if y < 0: y = 0
 
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.deiconify()
@@ -842,6 +840,8 @@ class PremiumDownloadProgressBox(tk.Toplevel):
             if parent and parent.winfo_viewable():
                 px, py = parent.winfo_rootx(), parent.winfo_rooty()
                 pw, ph = parent.winfo_width(), parent.winfo_height()
+                if px < -30000 or py < -30000:
+                    raise ValueError
                 x = px + (pw - width) // 2
                 y = py + (ph - height) // 2
             else:
@@ -849,6 +849,8 @@ class PremiumDownloadProgressBox(tk.Toplevel):
         except Exception:
             x = (sw - width) // 2
             y = (sh - height) // 2
+            if x < 0: x = 0
+            if y < 0: y = 0
 
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.deiconify()
