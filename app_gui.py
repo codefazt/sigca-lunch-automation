@@ -169,7 +169,7 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
 # Modo GUI (por defecto): Interfaz gráfica de escritorio
 # ---------------------------------------------------------------------------
 
-from src.config import BASE_DIR, load_env_dict, save_env_values, load_config, save_config, get_asset_path, set_startup, BG_MAIN, BG_CARD, BG_INPUT, FG_TEXT, FG_MUTED, ACCENT, ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW, ACCENT_BLUE, load_status, save_status
+from src.config import BASE_DIR, load_env_dict, save_env_values, load_config, save_config, get_asset_path, set_startup, BG_MAIN, BG_CARD, BG_INPUT, FG_TEXT, FG_MUTED, ACCENT, ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW, ACCENT_BLUE, load_status, save_status, APP_VERSION
 from src.logger import logger, gui_log_handler
 from src.bot_engine import LunchBot, kill_playwright_orphans
 from src.health_server import start_http_server
@@ -178,7 +178,7 @@ from src.scheduler import (
     start_scheduler, run_lunch_automation_job,
     register_windows_task, unregister_windows_task, check_windows_task_exists,
 )
-from src.notifications import send_telegram_message
+from src.notifications import send_telegram_message, send_windows_toast
 from src import state
 
 # Ocultar consola en modo compilado (solo para GUI)
@@ -596,6 +596,338 @@ def show_custom_confirm(title, message):
         return messagebox.askyesno(title, message)
 
 
+class PremiumUpdatePopup(tk.Toplevel):
+    """Pequeño popup no intrusivo en la esquina inferior derecha para notificar actualizaciones."""
+    def __init__(self, parent, version, on_open_details):
+        super().__init__(parent)
+        self.title("Actualización disponible")
+        self.configure(bg=BG_CARD)
+        self.resizable(False, False)
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        
+        border_frame = tk.Frame(self, bg=ACCENT_BLUE, bd=1.5)
+        border_frame.pack(fill="both", expand=True)
+        
+        inner_frame = tk.Frame(border_frame, bg=BG_CARD, padx=12, pady=10)
+        inner_frame.pack(fill="both", expand=True)
+        
+        header_frame = tk.Frame(inner_frame, bg=BG_CARD)
+        header_frame.pack(fill="x")
+        
+        info_icon = tk.Label(header_frame, text="✨", fg=ACCENT, bg=BG_CARD, font=("Segoe UI", 10, "bold"))
+        info_icon.pack(side="left")
+        
+        title_lbl = tk.Label(header_frame, text="Actualización Disponible", fg=FG_TEXT, bg=BG_CARD, font=("Segoe UI", 9, "bold"))
+        title_lbl.pack(side="left", padx=5)
+        
+        close_btn = tk.Label(header_frame, text="✕", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 10, "bold"), cursor="hand2")
+        close_btn.pack(side="right")
+        close_btn.bind("<Button-1>", lambda e: self.destroy())
+        close_btn.bind("<Enter>", lambda e: close_btn.configure(fg=ACCENT_RED))
+        close_btn.bind("<Leave>", lambda e: close_btn.configure(fg=FG_MUTED))
+        
+        msg_lbl = tk.Label(inner_frame, text=f"La versión {version} está disponible.", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 9), justify="left")
+        msg_lbl.pack(fill="x", pady=(5, 10))
+        
+        action_btn = tk.Button(
+            inner_frame, text="Ver detalles", font=("Segoe UI", 8, "bold"),
+            bg=ACCENT_BLUE, fg="#11111b", bd=0, padx=12, pady=3, cursor="hand2",
+            activeforeground="#11111b", activebackground=ACCENT_BLUE,
+            command=lambda: [self.destroy(), on_open_details()]
+        )
+        action_btn.pack(side="right")
+        action_btn.bind("<Enter>", lambda e: action_btn.configure(bg=self._darken(ACCENT_BLUE, 0.15)))
+        action_btn.bind("<Leave>", lambda e: action_btn.configure(bg=ACCENT_BLUE))
+        
+        self.update_idletasks()
+        w = 260
+        h = 95
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x = sw - w - 20
+        y = sh - h - 60
+        self.geometry(f"{w}x{h}+{x}+{y}")
+        self.deiconify()
+
+    @staticmethod
+    def _darken(hex_color, factor):
+        hex_color = hex_color.lstrip('#')
+        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        darkened = tuple(max(0, int(c * (1 - factor))) for c in rgb)
+        return f"#{darkened[0]:02x}{darkened[1]:02x}{darkened[2]:02x}"
+
+
+class PremiumUpdateConfirmBox(tk.Toplevel):
+    """Ventana modal premium para confirmar actualización, mostrando notas de release."""
+    def __init__(self, parent, version, notes):
+        super().__init__(parent)
+        self.result = False
+        self.title("Confirmar Actualización")
+        self.configure(bg=BG_MAIN)
+        self.resizable(False, False)
+        self.transient(parent)
+        self.withdraw()
+        self.overrideredirect(True)
+
+        color = ACCENT_BLUE
+        outer_frame = tk.Frame(self, bg=color, bd=2)
+        outer_frame.pack(fill="both", expand=True)
+
+        inner_frame = tk.Frame(outer_frame, bg=BG_CARD, padx=20, pady=20)
+        inner_frame.pack(fill="both", expand=True)
+
+        # Header
+        header_frame = tk.Frame(inner_frame, bg=BG_CARD)
+        header_frame.pack(fill="x", pady=(0, 15))
+
+        title_lbl = tk.Label(header_frame, text="Nueva Versión Detectada", font=("Segoe UI", 12, "bold"), fg=FG_TEXT, bg=BG_CARD)
+        title_lbl.pack(side="left")
+
+        close_btn = tk.Label(header_frame, text="✕", font=("Segoe UI", 12, "bold"), fg=FG_MUTED, bg=BG_CARD, cursor="hand2")
+        close_btn.pack(side="right")
+        close_btn.bind("<Button-1>", lambda e: self.on_no())
+        close_btn.bind("<Enter>", lambda e: close_btn.configure(fg=ACCENT_RED))
+        close_btn.bind("<Leave>", lambda e: close_btn.configure(fg=FG_MUTED))
+
+        # Contenido
+        content_frame = tk.Frame(inner_frame, bg=BG_CARD)
+        content_frame.pack(fill="both", expand=True, pady=(0, 15))
+
+        info_lbl = tk.Label(
+            content_frame, 
+            text=f"¿Deseas descargar e instalar SiGCABot {version}?\nSe aplicará de forma automática y se reiniciará el programa.", 
+            font=("Segoe UI", 10), fg=FG_TEXT, bg=BG_CARD, justify="left"
+        )
+        info_lbl.pack(anchor="w", pady=(0, 10))
+
+        # Notas de versión
+        notes_frame = tk.Frame(content_frame, bg=BG_INPUT, bd=1, highlightbackground="#1e2328", highlightthickness=1)
+        notes_frame.pack(fill="both", expand=True)
+
+        notes_title = tk.Label(notes_frame, text="Notas de la versión:", font=("Segoe UI", 9, "bold"), fg=ACCENT, bg=BG_INPUT)
+        notes_title.pack(anchor="w", padx=10, pady=(5, 0))
+
+        self.notes_text = scrolledtext.ScrolledText(
+            notes_frame, font=("Segoe UI", 9), fg=FG_TEXT, bg=BG_INPUT, 
+            bd=0, height=8, wrap="word", highlightthickness=0
+        )
+        self.notes_text.pack(fill="both", expand=True, padx=10, pady=5)
+        self.notes_text.insert("1.0", notes)
+        self.notes_text.configure(state="disabled")
+
+        # Botones
+        btn_frame = tk.Frame(inner_frame, bg=BG_CARD)
+        btn_frame.pack(fill="x")
+
+        no_btn = tk.Button(btn_frame, text="Cancelar", font=("Segoe UI", 10, "bold"), bg=BG_INPUT, fg=FG_TEXT, bd=0, padx=22, pady=6, cursor="hand2", command=self.on_no)
+        no_btn.pack(side="right")
+        no_btn.bind("<Enter>", lambda e: no_btn.configure(bg=self._darken(BG_INPUT, 0.15)))
+        no_btn.bind("<Leave>", lambda e: no_btn.configure(bg=BG_INPUT))
+
+        yes_btn = tk.Button(btn_frame, text="Descargar e Instalar", font=("Segoe UI", 10, "bold"), bg=ACCENT_BLUE, fg="#11111b", bd=0, padx=22, pady=6, cursor="hand2", command=self.on_yes)
+        yes_btn.pack(side="right", padx=(0, 10))
+        yes_btn.bind("<Enter>", lambda e: yes_btn.configure(bg=self._darken(ACCENT_BLUE, 0.15)))
+        yes_btn.bind("<Leave>", lambda e: yes_btn.configure(bg=ACCENT_BLUE))
+
+        # Centrar
+        self.update_idletasks()
+        width = 460
+        height = inner_frame.winfo_reqheight() + 4
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+
+        try:
+            if parent and parent.winfo_viewable():
+                px, py = parent.winfo_rootx(), parent.winfo_rooty()
+                pw, ph = parent.winfo_width(), parent.winfo_height()
+                x = px + (pw - width) // 2
+                y = py + (ph - height) // 2
+            else:
+                raise ValueError
+        except Exception:
+            x = (sw - width) // 2
+            y = (sh - height) // 2
+
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.deiconify()
+        self.lift()
+        self.attributes("-topmost", True)
+        self.focus_force()
+        self.grab_set()
+
+        # Soporte para arrastrar
+        self.drag_data = {"x": 0, "y": 0}
+        header_frame.bind("<ButtonPress-1>", self._start_drag)
+        header_frame.bind("<B1-Motion>", self._drag)
+
+    def on_yes(self):
+        self.result = True
+        self.destroy()
+
+    def on_no(self):
+        self.result = False
+        self.destroy()
+
+    def destroy(self):
+        try:
+            self.grab_release()
+        except Exception:
+            pass
+        super().destroy()
+
+    def _start_drag(self, event):
+        self.drag_data["x"] = event.x
+        self.drag_data["y"] = event.y
+
+    def _drag(self, event):
+        x = self.winfo_x() + event.x - self.drag_data["x"]
+        y = self.winfo_y() + event.y - self.drag_data["y"]
+        self.geometry(f"+{x}+{y}")
+
+    @staticmethod
+    def _darken(hex_color, factor):
+        hex_color = hex_color.lstrip('#')
+        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        darkened = tuple(max(0, int(c * (1 - factor))) for c in rgb)
+        return f"#{darkened[0]:02x}{darkened[1]:02x}{darkened[2]:02x}"
+
+
+class PremiumDownloadProgressBox(tk.Toplevel):
+    """Ventana modal premium que muestra la barra de progreso de descarga."""
+    def __init__(self, parent, download_url, on_success):
+        super().__init__(parent)
+        self.title("Descargando Actualización")
+        self.configure(bg=BG_MAIN)
+        self.resizable(False, False)
+        self.transient(parent)
+        self.withdraw()
+        self.overrideredirect(True)
+
+        self.download_url = download_url
+        self.on_success = on_success
+        self.error_occurred = None
+
+        color = ACCENT_GREEN
+        outer_frame = tk.Frame(self, bg=color, bd=2)
+        outer_frame.pack(fill="both", expand=True)
+
+        inner_frame = tk.Frame(outer_frame, bg=BG_CARD, padx=22, pady=22)
+        inner_frame.pack(fill="both", expand=True)
+
+        # Header
+        self.title_lbl = tk.Label(inner_frame, text="Descargando Componentes...", font=("Segoe UI", 12, "bold"), fg=FG_TEXT, bg=BG_CARD)
+        self.title_lbl.pack(anchor="w", pady=(0, 10))
+
+        self.status_lbl = tk.Label(inner_frame, text="Iniciando descarga...", font=("Segoe UI", 9), fg=FG_MUTED, bg=BG_CARD)
+        self.status_lbl.pack(anchor="w", pady=(0, 15))
+
+        # Progreso
+        progress_frame = tk.Frame(inner_frame, bg=BG_INPUT, bd=1, highlightbackground="#1e2328", highlightthickness=1, height=16)
+        progress_frame.pack(fill="x", pady=(0, 15))
+        progress_frame.pack_propagate(False)
+
+        self.progress_bar = tk.Frame(progress_frame, bg=ACCENT_GREEN, width=0)
+        self.progress_bar.pack(side="left", fill="y")
+
+        self.percent_lbl = tk.Label(inner_frame, text="0%", font=("Segoe UI", 9, "bold"), fg=ACCENT_GREEN, bg=BG_CARD)
+        self.percent_lbl.pack(anchor="e")
+
+        # Centrar
+        self.update_idletasks()
+        width = 380
+        height = inner_frame.winfo_reqheight() + 4
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+
+        try:
+            if parent and parent.winfo_viewable():
+                px, py = parent.winfo_rootx(), parent.winfo_rooty()
+                pw, ph = parent.winfo_width(), parent.winfo_height()
+                x = px + (pw - width) // 2
+                y = py + (ph - height) // 2
+            else:
+                raise ValueError
+        except Exception:
+            x = (sw - width) // 2
+            y = (sh - height) // 2
+
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.deiconify()
+        self.lift()
+        self.attributes("-topmost", True)
+        self.grab_set()
+
+        # Iniciar descarga en hilo secundario
+        threading.Thread(target=self._download_thread, daemon=True).start()
+
+    def _update_progress(self, percent):
+        """Callback ejecutado desde el hilo de descarga (vía after)."""
+        if self.winfo_exists():
+            max_w = 336  # Ancho interno del Frame de progreso (380 - 44 de padding)
+            w = int((percent / 100) * max_w)
+            self.progress_bar.configure(width=w)
+            self.percent_lbl.configure(text=f"{percent}%")
+            self.status_lbl.configure(text=f"Descargado: {percent}%")
+
+    def _download_thread(self):
+        try:
+            import src.updater as updater
+            updater.download_and_prepare_update(
+                self.download_url,
+                progress_callback=lambda p: self.master.after(0, lambda: self._update_progress(p))
+            )
+            self.master.after(0, self._handle_success)
+        except Exception as e:
+            self.error_occurred = str(e)
+            self.master.after(0, self._handle_failure)
+
+    def _handle_success(self):
+        self.title_lbl.configure(text="Aplicando Cambios...")
+        self.status_lbl.configure(text="Iniciando script de actualización...")
+        self.progress_bar.configure(bg=ACCENT_BLUE)
+        self.percent_lbl.configure(text="Listo", fg=ACCENT_BLUE)
+        self.update()
+        
+        # Esperar un momento
+        self.after(1000, self._apply_update)
+
+    def _apply_update(self):
+        try:
+            import src.updater as updater
+            updater.launch_updater_script()
+            # Salida limpia de la aplicación deteniendo todos los hilos y tray
+            if app:
+                app.exit_application()
+            else:
+                sys.exit(0)
+        except Exception as e:
+            self.error_occurred = str(e)
+            self._handle_failure()
+
+    def _handle_failure(self):
+        self.grab_release()
+        self.destroy()
+        if self.on_success:
+            self.on_success(False, self.error_occurred)
+
+    def destroy(self):
+        try:
+            self.grab_release()
+        except Exception:
+            pass
+        super().destroy()
+
+
+def show_update_confirm(parent, version, notes):
+    dialog = PremiumUpdateConfirmBox(parent, version, notes)
+    parent.wait_window(dialog)
+    return dialog.result
+
+
+def start_download_update(parent, download_url, on_finished):
+    dialog = PremiumDownloadProgressBox(parent, download_url, on_finished)
+    parent.wait_window(dialog)
+
+
 # ---------------------------------------------------------------------------
 # Clase Principal de la GUI
 # ---------------------------------------------------------------------------
@@ -629,6 +961,11 @@ class AppGUI:
 
         # Programar la verificación de dependencias de Playwright al inicio
         self.root.after(100, self.verify_dependencies_startup)
+
+        # Variables de actualización
+        self.update_info = None
+        self.update_popup_shown = False
+        self.root.after(3000, self.check_update_startup)
 
     # --- Estilos ---
 
@@ -865,8 +1202,8 @@ class AppGUI:
         title_lbl = tk.Label(self.sidebar, text="SiGCA Lunch Bot", fg=FG_TEXT, bg=BG_CARD, font=("Segoe UI", 12, "bold"))
         title_lbl.pack()
 
-        version_lbl = tk.Label(self.sidebar, text="Versión 2.2.0", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8))
-        version_lbl.pack(pady=(0, 5))
+        self.version_lbl = tk.Label(self.sidebar, text=f"Versión {APP_VERSION}", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8))
+        self.version_lbl.pack(pady=(0, 5))
 
         sep = tk.Frame(self.sidebar, height=1, bg=BG_INPUT)
         sep.pack(fill="x", padx=20, pady=5)
@@ -1555,6 +1892,119 @@ class AppGUI:
             subprocess.run(["notepad.exe", log_file])
         else:
             show_custom_info("Sin Logs", "El archivo de logs no existe aún.")
+
+    # ---------------------------------------------------------------------------
+    # Lógica de Actualización Automática (GitHub Releases / Batch Script)
+    # ---------------------------------------------------------------------------
+
+    def check_update_startup(self):
+        """Lanza la verificación de actualizaciones en un hilo secundario."""
+        threading.Thread(target=self._run_check_update_thread, daemon=True).start()
+
+    def _run_check_update_thread(self):
+        """Método ejecutado en hilo secundario para comprobar la API de GitHub."""
+        try:
+            import src.updater as updater
+            has_update, version, url, notes = updater.check_for_update()
+            
+            if has_update:
+                self.update_info = {
+                    "version": version,
+                    "url": url,
+                    "notes": notes
+                }
+                # Delegar la actualización de UI al hilo de Tkinter
+                self.root.after(0, self.on_update_detected)
+            else:
+                self.update_info = None
+                self.root.after(0, self.on_no_update_detected)
+        except Exception as e:
+            logger.warning(f"Error al verificar actualizaciones en segundo plano: {e}")
+        finally:
+            # Programar la siguiente verificación en 1 hora (3,600,000 milisegundos)
+            self.root.after(3600000, self.check_update_startup)
+
+    def on_update_detected(self):
+        """Actualiza la interfaz para reflejar la disponibilidad de una nueva versión."""
+        if not self.update_info:
+            return
+            
+        version = self.update_info["version"]
+        
+        # 1. Modificar la etiqueta de versión en la barra lateral para indicar que hay update
+        self.version_lbl.configure(
+            text=f"v{APP_VERSION} (¡Nueva v{version}!)", 
+            fg=ACCENT_GREEN, 
+            cursor="hand2"
+        )
+        # Enlazar clic en el label de versión para iniciar flujo de actualización
+        self.version_lbl.bind("<Button-1>", lambda e: self.trigger_update_flow())
+        
+        # 2. Agregar un banner interactivo verde brillante debajo de la versión si no está creado
+        if not hasattr(self, "update_banner_btn") or not self.update_banner_btn.winfo_exists():
+            self.update_banner_btn = tk.Button(
+                self.sidebar, 
+                text="Actualizar Ahora ✨", 
+                font=("Segoe UI", 8, "bold"), 
+                bg=ACCENT_BLUE, 
+                fg="#11111b", 
+                bd=0, 
+                pady=4, 
+                cursor="hand2",
+                command=self.trigger_update_flow
+            )
+            # Insertar en la sidebar abajo de la versión
+            self.update_banner_btn.pack(pady=(2, 5))
+            self.update_banner_btn.bind("<Enter>", lambda e: self.update_banner_btn.configure(bg=PremiumUpdatePopup._darken(ACCENT_BLUE, 0.15)))
+            self.update_banner_btn.bind("<Leave>", lambda e: self.update_banner_btn.configure(bg=ACCENT_BLUE))
+
+        # 3. Mostrar el popup no invasivo en la esquina inferior derecha si no se ha mostrado en esta sesión
+        if not self.update_popup_shown:
+            self.update_popup_shown = True
+            # Evitar lanzar popup si la ventana principal está oculta en segundo plano (System Tray)
+            if self.root.winfo_viewable():
+                PremiumUpdatePopup(self.root, version, self.trigger_update_flow)
+            else:
+                # Notificación Toast de Windows nativa de forma segura si está en el Tray
+                try:
+                    send_windows_toast(
+                        "Actualización de SiGCABot",
+                        f"La versión {version} está disponible para instalar. Abre el panel para actualizar."
+                    )
+                except Exception:
+                    pass
+
+    def on_no_update_detected(self):
+        """Restablece el estado de los componentes de versión en la UI si no hay actualizaciones."""
+        self.version_lbl.configure(text=f"Versión {APP_VERSION}", fg=FG_MUTED, cursor="")
+        self.version_lbl.unbind("<Button-1>")
+        if hasattr(self, "update_banner_btn") and self.update_banner_btn.winfo_exists():
+            self.update_banner_btn.destroy()
+
+    def trigger_update_flow(self):
+        """Lanza el diálogo confirmador y procesa la descarga e instalación."""
+        if not self.update_info:
+            show_custom_info("Actualizaciones", "Tu aplicación está al día.")
+            return
+
+        version = self.update_info["version"]
+        notes = self.update_info["notes"]
+        url = self.update_info["url"]
+
+        # 1. Mostrar confirmador premium con notas
+        confirm = show_update_confirm(self.root, version, notes)
+        if confirm:
+            # 2. Mostrar barra de progreso de descarga e iniciar
+            start_download_update(self.root, url, self._on_download_finished)
+
+    def _on_download_finished(self, success, error_msg):
+        """Callback invocado si falla la descarga."""
+        if not success:
+            logger.error(f"Error al descargar la actualización: {error_msg}")
+            show_custom_error(
+                "Error de Actualización",
+                f"No se pudo descargar la actualización:\n{error_msg}\n\nPor favor, inténtalo de nuevo más tarde."
+            )
 
     # ---------------------------------------------------------------------------
     # Lógica de Diagnóstico y Subprocesos para Evitar Congelamientos

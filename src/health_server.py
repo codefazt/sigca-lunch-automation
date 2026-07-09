@@ -15,7 +15,7 @@ import http.server
 import socketserver
 import urllib.parse
 
-from src.config import BASE_DIR, load_status
+from src.config import BASE_DIR, load_status, APP_VERSION
 from src import state
 
 logger = logging.getLogger("SiGCABot")
@@ -57,7 +57,7 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
             "active": status_data.get("is_active", True),
             "last_run": status_data.get("last_run_timestamp", "Nunca"),
             "last_status": status_data.get("last_run_status", "N/A"),
-            "version": "2.2.0"
+            "version": APP_VERSION
         }
         self.wfile.write(json.dumps(response).encode("utf-8"))
 
