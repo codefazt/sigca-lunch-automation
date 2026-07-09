@@ -1795,6 +1795,15 @@ class AppGUI:
         
         save_config(config)
 
+        # Sincronizar automáticamente la tarea programada de Windows si ya está registrada
+        try:
+            from src.scheduler import check_windows_task_exists, register_windows_task
+            if check_windows_task_exists():
+                logger.info("Sincronizando el Programador de Tareas de Windows con el nuevo horario...")
+                register_windows_task(config["start_hour"], config["start_minute"])
+        except Exception as e:
+            logger.error(f"No se pudo sincronizar la tarea programada de Windows: {e}")
+
         startup_enabled = self.startup_var.get()
         set_startup(startup_enabled)
 
