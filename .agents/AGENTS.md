@@ -49,3 +49,8 @@ El proyecto se divide en el script principal de entrada y un paquete de módulos
 - Al interactuar con el Programador de Tareas, genera comandos PowerShell envueltos en codificación Base64 si contienen caracteres especiales o rutas de Windows complejas.
 - Garantiza que `PLAYWRIGHT_BROWSERS_PATH` esté correctamente configurado en la carpeta de AppData local del usuario para evitar fallos de ejecución cuando se ejecuta bajo contextos de sistema o tareas programadas de Windows.
 
+### 4. Flujo de Compilación y Releases en GitHub
+- Las nuevas versiones de distribución del bot deben empaquetarse mediante `.\build.bat --package` y publicarse formalmente como un "Release" en GitHub.
+- Los agentes AI deben conocer y hacer referencia al skill local [git_release](file:///c:/Users/Administrador/Desktop/python/solicitud_almuerzo_auto/.agents/skills/git_release/SKILL.md) para estructurar comandos de publicación limpios con `gh release create`.
+
+

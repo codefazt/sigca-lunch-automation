@@ -1441,6 +1441,31 @@ class AppGUI:
         # Verificar estado inicial de la tarea (en hilo para no bloquear GUI)
         threading.Thread(target=self._refresh_task_status, daemon=True).start()
 
+        # --- Grupo 5: Días Excluidos (Teletrabajo / Libres) ---
+        group_days = tk.Frame(scrollable_frame, bg=BG_CARD, bd=1, highlightbackground="#1e2328", highlightthickness=1)
+        group_days.pack(fill="x", pady=10, padx=5)
+        
+        title_days = tk.Label(group_days, text="DÍAS EXCLUIDOS DE PEDIDO (TELETRABAJO / LIBRES)", font=("Segoe UI", 8, "bold"), bg=BG_CARD, fg=ACCENT)
+        title_days.grid(row=0, column=0, columnspan=7, sticky="w", padx=15, pady=(15, 5))
+        
+        self.day_vars = {}
+        dias_nombres = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+        for idx, dia in enumerate(dias_nombres):
+            var = tk.BooleanVar(value=False)
+            self.day_vars[dia] = var
+            chk = tk.Checkbutton(
+                group_days, 
+                text=dia, 
+                variable=var, 
+                bg=BG_CARD, 
+                fg=FG_TEXT, 
+                activebackground=BG_CARD, 
+                activeforeground=FG_TEXT, 
+                selectcolor=BG_INPUT, 
+                bd=0
+            )
+            chk.grid(row=1, column=idx, sticky="w", padx=15, pady=(5, 15))
+
         # --- Loading indicator ---
         self.loading_lbl = tk.Label(scrollable_frame, text="", font=("Segoe UI", 10, "bold"), bg=BG_MAIN, fg=ACCENT_GREEN)
         self.loading_lbl.pack(pady=5)
@@ -1692,6 +1717,11 @@ class AppGUI:
         self.hour_cb.set(f"{config.get('start_hour', 15):02d}")
         self.min_cb.set(f"{config.get('start_minute', 30):02d}")
 
+        # Cargar días deshabilitados
+        disabled_days = config.get("disabled_days", [])
+        for dia, var in self.day_vars.items():
+            var.set(dia in disabled_days)
+
         status = load_status()
         self.startup_var.set(status.get("startup_on_boot", False))
         self.cancelled_var.set(status.get("is_cancelled_today", False))
@@ -1758,6 +1788,11 @@ class AppGUI:
         config["prefer_menu"] = self.menu_cb.get().lower()
         config["start_hour"] = int(self.hour_cb.get())
         config["start_minute"] = int(self.min_cb.get())
+        
+        # Guardar días deshabilitados
+        selected_disabled_days = [dia for dia, var in self.day_vars.items() if var.get()]
+        config["disabled_days"] = selected_disabled_days
+        
         save_config(config)
 
         startup_enabled = self.startup_var.get()

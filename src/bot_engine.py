@@ -423,6 +423,24 @@ class LunchBot:
                     logger.warning(msg)
                     return 0, msg, None
 
+                # Validar días deshabilitados (libres/remotos)
+                disabled_days = self.config.get("disabled_days", [])
+                if disabled_days:
+                    dias_semana = {
+                        0: "Lunes",
+                        1: "Martes",
+                        2: "Miércoles",
+                        3: "Jueves",
+                        4: "Viernes",
+                        5: "Sábado",
+                        6: "Domingo"
+                    }
+                    today_name = dias_semana.get(datetime.now().weekday())
+                    if today_name in disabled_days:
+                        msg = f"Hoy es {today_name}, marcado como día libre/remoto en la configuración. Ejecución cancelada automáticamente."
+                        logger.info(msg)
+                        return 0, msg, None
+
             if not dry_run and not self.is_time_valid():
                 msg = "Fuera de horario de ejecución (3:30 PM - 9:59 AM)."
                 logger.warning(msg)

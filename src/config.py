@@ -236,6 +236,7 @@ def load_config():
         "retries": 3,
         "retry_delay_sec": 300,
         "prefer_menu": "saludable",
+        "disabled_days": [],
         "questionnaire": {
             "ubicacion": "Sede ExCle",
             "estrellas": "3",

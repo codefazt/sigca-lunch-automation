@@ -152,20 +152,28 @@ El archivo ejecutable compilado se encuentra en:
 
 ---
 
-## 🏗️ Empaquetado / Compilación de la Aplicación
+## 🏗️ Empaquetado y Publicación de Versiones
 
-Para reconstruir el ejecutable autocontenido, utiliza el script de compilación automatizado:
+### 1. Compilar y Empaquetar
+Para reconstruir el ejecutable autocontenido y empaquetar el paquete portable de distribución en formato ZIP, utiliza el script automatizado:
 
 ```bash
-build.bat
+.\build.bat --package
 ```
 
-Esto activará el entorno virtual, compilará con PyInstaller y creará un paquete limpio en `dist\SiGCABot_Release\` con todos los archivos necesarios para la distribución.
+Esto generará la carpeta de distribución limpia en `dist\SiGCABot_Release\` y el archivo comprimido listo para distribución en **`dist\SiGCABot_Release.zip`**.
 
-Si prefieres ejecutar PyInstaller manualmente:
+### 2. Publicar Actualización en GitHub Releases (CLI)
+Los clientes de SiGCABot se auto-actualizan en vivo consultando la API de releases. Para publicar la nueva versión compilada y adjuntar el archivo ZIP a través de comandos, ejecuta:
+
 ```bash
-.\venv\Scripts\pyinstaller.exe SiGCABot.spec --noconfirm
+# Iniciar sesión en GitHub CLI si es necesario
+gh auth login -p https -w
+
+# Publicar el release con su binario
+gh release create v2.4.0 dist\SiGCABot_Release.zip --title "Versión 2.4.0 - Nombre de la Versión" --notes "Notas detalladas de los cambios y correcciones."
 ```
+
 
 ---
 
