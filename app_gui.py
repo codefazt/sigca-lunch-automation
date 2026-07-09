@@ -69,6 +69,42 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
     elif _args.run_job:
         logger.info("Iniciando ejecución de LunchBot en modo CLI (--run-job)...")
         try:
+            status_info = load_status()
+            
+            # 1. Si el bot está inactivo en status.json y no es una ejecución forzada, no hacer nada.
+            if not status_info.get("is_active", True) and not _args.force_time:
+                logger.warning("El bot está desactivado ('is_active': False). Deteniendo ejecución en segundo plano.")
+                sys.exit(0)
+
+            # 2. Si el almuerzo de hoy fue cancelado y no es forzado, cancelar ejecución.
+            if status_info.get("is_cancelled_today", False) and not _args.force_time:
+                logger.info("El almuerzo de hoy fue cancelado por el usuario. Deteniendo ejecución en segundo plano.")
+                sys.exit(0)
+
+            # 3. Si ya se ejecutó exitosamente hoy y no es forzado, no volver a intentar.
+            if not _args.force_time:
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                if status_info.get("last_successful_run") == today_str:
+                    logger.info("El almuerzo ya fue solicitado con éxito hoy. Deteniendo ejecución para evitar duplicados.")
+                    sys.exit(0)
+
+            # 4. Evitar colisión si la GUI ya está abierta en segundo plano.
+            # Si el puerto 18293 está escuchando, la GUI y su scheduler interno están activos.
+            if not _args.force_time:
+                import socket
+                gui_active = False
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.settimeout(0.5)
+                        s.connect(("127.0.0.1", 18293))
+                        gui_active = True
+                except socket.error:
+                    pass
+                
+                if gui_active:
+                    logger.info("La GUI del aplicativo está activa y gestionando el planificador. Deteniendo tarea CLI redundante.")
+                    sys.exit(0)
+
             bot = LunchBot()
             if _args.force_time:
                 bot.is_time_valid = lambda *a, **k: True
@@ -1862,7 +1898,7 @@ class AppGUI:
             self._finish_subprocess(5, f"No se pudo iniciar el subproceso: {e}")
 
     def _poll_subprocess(self):
-        """Sondea el estado del subproceso y maneja el timeout de 30s."""
+        """Sondea el estado del subproceso y maneja el timeout de (1 minuto)."""
         proc = self.active_subprocess
         if proc is None:
             return
@@ -1873,10 +1909,10 @@ class AppGUI:
             self._finish_subprocess(ret_code, f"El proceso terminó con código {ret_code}")
             return
 
-        # Verificar si se superó el tiempo límite (30 segundos)
+        # Verificar si se superó el tiempo límite (1 minuto)
         elapsed = time.time() - self.subprocess_start_time
-        if elapsed > 30:
-            logger.warning(f"Límite de tiempo excedido (30s) para la operación: {self.subprocess_type}. Forzando detención...")
+        if elapsed > 60:
+            logger.warning(f"Límite de tiempo excedido (1 minuto) para la operación: {self.subprocess_type}. Forzando detención...")
             self._terminate_active_subprocess(timed_out=True)
             return
 
@@ -1946,7 +1982,7 @@ class AppGUI:
         kill_playwright_orphans()
 
         # Registrar el error
-        err_msg = f"La operación '{op_type}' fue detenida " + ("automáticamente por límite de tiempo (30s)." if timed_out else "manualmente por el usuario.")
+        err_msg = f"La operación '{op_type}' fue detenida " + ("automáticamente por límite de tiempo (1 minuto)." if timed_out else "manualmente por el usuario.")
         logger.error(err_msg)
 
         # Enviar notificación a Telegram si está configurado
@@ -1967,7 +2003,7 @@ class AppGUI:
             token = env.get("TELEGRAM_TOKEN")
             chat_id = env.get("TELEGRAM_CHAT_ID")
             if token and chat_id:
-                reason = "límite de tiempo excedido (30s)" if timed_out else "cancelación manual del usuario"
+                reason = "límite de tiempo excedido (1 minuto)" if timed_out else "cancelación manual del usuario"
                 msg = f"🚨 <b>Alerta de SiGCABot</b>:\nLa operación <code>{op_type}</code> fue interrumpida debido a: {reason}."
                 # Ejecutar asíncronamente en un hilo
                 threading.Thread(
