@@ -255,7 +255,15 @@ def _update_gui_status_badge_sync():
         lr_date = status_info.get("last_run_timestamp", "Nunca")
         app.last_run_lbl.configure(text=f"Último pedido:\n{lr_date}")
     if hasattr(app, "last_status_lbl") and app.last_status_lbl.winfo_exists():
-        app.last_status_lbl.configure(text=f"Resultado: {status_info.get('last_run_status', 'N/A')}")
+        raw_status = status_info.get('last_run_status', 'N/A')
+        display_status = (raw_status or 'N/A').upper()
+        if raw_status == "success":
+            status_color = ACCENT_GREEN
+        elif raw_status and (raw_status.startswith("error") or raw_status.startswith("cancelado")):
+            status_color = ACCENT_RED
+        else:
+            status_color = FG_MUTED
+        app.last_status_lbl.configure(text=f"Resultado: {display_status}", fg=status_color)
         
     # Refrescar conteo y UI de cancelación
     if hasattr(app, "cancel_count_lbl") and app.cancel_count_lbl.winfo_exists():
@@ -1239,7 +1247,7 @@ class AppGUI:
         self.last_run_lbl = tk.Label(self.sidebar, text="Último pedido:\nCargando...", fg=FG_TEXT, bg=BG_CARD, font=("Segoe UI", 8), justify="center")
         self.last_run_lbl.pack(pady=(5, 1))
 
-        self.last_status_lbl = tk.Label(self.sidebar, text="Resultado: -", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8))
+        self.last_status_lbl = tk.Label(self.sidebar, text="Resultado: -", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8, "bold"))
         self.last_status_lbl.pack(pady=(0, 5))
 
         # --- Botones y Checkbox organizados de forma secuencial de arriba a abajo ---
