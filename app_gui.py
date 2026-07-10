@@ -1265,9 +1265,17 @@ class AppGUI:
         self.cancel_date_lbl = tk.Label(self.sidebar, text="Cancelado el: N/A", fg=FG_MUTED, bg=BG_CARD, font=("Segoe UI", 8))
         self.cancel_date_lbl.pack(pady=1)
 
-        self.refresh_cancellations_btn = tk.Button(self.sidebar, text="↻ Refrescar", font=("Segoe UI", 8), command=self.refresh_cancellations)
-        self.refresh_cancellations_btn.pack(pady=4)
+        # Contenedor para botones de Refrescar / Resetear Éxito
+        btn_sidebar_frame = tk.Frame(self.sidebar, bg=BG_CARD)
+        btn_sidebar_frame.pack(fill="x", padx=20, pady=4)
+
+        self.refresh_cancellations_btn = tk.Button(btn_sidebar_frame, text="↻ Refrescar", font=("Segoe UI", 8), command=self.refresh_cancellations)
+        self.refresh_cancellations_btn.pack(side="left", fill="x", expand=True, padx=(0, 2))
         self.style_button(self.refresh_cancellations_btn, "subtle")
+
+        self.reset_success_btn = tk.Button(btn_sidebar_frame, text="🧹 Resetear Éxito", font=("Segoe UI", 8), command=self.reset_lunch_success_action)
+        self.reset_success_btn.pack(side="right", fill="x", expand=True, padx=(2, 0))
+        self.style_button(self.reset_success_btn, "subtle")
 
         # Botón Forzar Parada (siempre disponible, destacado en rojo)
         self.stop_processes_btn = tk.Button(self.sidebar, text="🚨 Forzar Parada", font=("Segoe UI", 9, "bold"), command=self.force_stop_active_processes)
@@ -1888,6 +1896,17 @@ class AppGUI:
     def refresh_cancellations(self):
         update_gui_status_badge()
         logger.info("Estado de cancelaciones refrescado en la GUI")
+
+    def reset_lunch_success_action(self):
+        """Limpia el registro de éxito del almuerzo de hoy para permitir la re-ejecución automática."""
+        if show_custom_confirm("Resetear Registro", "¿Deseas borrar el registro del almuerzo exitoso de hoy?\n\nEsto permitirá que el bot vuelva a intentar la solicitud automática si está dentro de la ventana horaria."):
+            status_info = load_status()
+            status_info["last_successful_run"] = ""
+            status_info["last_run_status"] = "reseteado"
+            save_status(status_info)
+            update_gui_status_badge()
+            logger.info("Se ha reseteado manualmente el registro de éxito del almuerzo de hoy.")
+            show_custom_success("Estado Reseteado", "El registro del almuerzo de hoy ha sido limpiado con éxito.\nEl planificador automático podrá volver a procesar solicitudes hoy.")
 
     # --- Acciones del Programador de Tareas de Windows ---
 
