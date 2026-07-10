@@ -2449,7 +2449,7 @@ class AppGUI:
                         msg = line.strip()
                         if msg:
                             self.subprocess_output_lines.append(msg)
-                            self.root.after(0, lambda m=msg: logger.info(m))
+                            logger.info(msg)
                     proc.stdout.close()
 
             threading.Thread(target=read_stdout, daemon=True).start()

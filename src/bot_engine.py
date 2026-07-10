@@ -483,7 +483,21 @@ class LunchBot:
                             break
                     except ConnectionError as ce:
                         logger.error(f"Error de conexión detectado. Abortando reintentos con otras contraseñas: {ce}")
-                        raise ce
+                        msg = f"Error de conexión o red al acceder a SiGCA: {ce}"
+                        evidence = None
+                        try:
+                            evidence = self.capture_evidence(page, "connection_failed")
+                        except Exception:
+                            pass
+                        try:
+                            browser.close()
+                        except Exception:
+                            pass
+                        self._notify_toast("Error de Conexión - SiGCA", "No se pudo establecer comunicación con el portal.")
+                        self._notify_telegram(f"❌ <b>Error de Conexión SiGCA</b>:\n{html.escape(msg)}")
+                        if evidence:
+                            self._notify_telegram_photo(evidence, "Error de Conexión")
+                        return 3, msg, evidence
                     except Exception as e:
                         logger.error(f"Excepción durante intento de login: {e}")
                         self.capture_evidence(page, "login_error_exception")
@@ -788,7 +802,21 @@ class LunchBot:
                                 break
                         except ConnectionError as ce:
                             logger.error(f"Error de conexión detectado. Abortando reintentos con otras contraseñas: {ce}")
-                            raise ce
+                            msg = f"Error de conexión o red al intentar cancelar: {ce}"
+                            evidence = None
+                            try:
+                                evidence = self.capture_evidence(page, "cancel_connection_failed")
+                            except Exception:
+                                pass
+                            try:
+                                browser.close()
+                            except Exception:
+                                pass
+                            self._notify_toast("Error al Cancelar - SiGCA", "No se pudo establecer comunicación con el portal.")
+                            self._notify_telegram(f"❌ <b>Error de Conexión al Cancelar</b>:\n{html.escape(msg)}")
+                            if evidence:
+                                self._notify_telegram_photo(evidence, "Error de Conexión (Cancelación)")
+                            return 3, msg, evidence
                         except Exception as e:
                             logger.error(f"Excepción durante intento de login para cancelación: {e}")
 
