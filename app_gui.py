@@ -969,8 +969,8 @@ class AppGUI:
 
         logger.info("Aplicación iniciada. Bienvenido al panel de SiGCA Bot.")
 
-        # Programar la verificación de dependencias de Playwright al inicio
-        self.root.after(100, self.verify_dependencies_startup)
+        # Programar la verificación de dependencias de Playwright al inicio (dar 2s para renderizado de Tkinter)
+        self.root.after(2000, self.verify_dependencies_startup)
 
         # Variables de actualización
         self.update_info = None

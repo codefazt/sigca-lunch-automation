@@ -84,6 +84,8 @@ def start_scheduler(gui_update_callback=None):
         gui_update_callback: Función opcional para refrescar la GUI.
     """
     logger.info("Hilo Planificador iniciado. Buscando ventana horaria configurada.")
+    # Delay inicial de 5 segundos para permitir que la GUI se renderice y complete el chequeo inicial de dependencias
+    time.sleep(5)
     while not state.stop_threads:
         try:
             status_info = load_status()
