@@ -16,7 +16,6 @@ import base64
 from datetime import datetime
 
 from src.config import BASE_DIR, load_status, save_status, load_config
-from src.bot_engine import LunchBot
 from src import state
 
 logger = logging.getLogger("SiGCABot")
@@ -31,42 +30,59 @@ TASK_NAME = "SiGCA Auto Lunch Order"
 
 def run_lunch_automation_job(dry_run=False, gui_update_callback=None):
     """
-    Ejecuta el job de automatización del almuerzo y actualiza status.json.
-
-    Args:
-        dry_run: Si es True, no confirma el pedido final.
-        gui_update_callback: Función opcional para refrescar el badge de la GUI.
+    Ejecuta el job de automatización del almuerzo en un subproceso desacoplado
+    y actualiza la GUI al finalizar.
     """
+    logger.info("Lanzando subproceso para ejecución automatizada del bot...")
     try:
-        bot = LunchBot()
-        exit_code, msg, evidence = bot.run_automation(dry_run=dry_run)
-
-        status_info = load_status()
-        status_info["last_run_timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        if exit_code == 0:
-            status_info["last_run_status"] = "success"
-            if not dry_run:
-                status_info["last_successful_run"] = datetime.now().strftime("%Y-%m-%d")
-            logger.info(f"ÉXITO: {msg}")
+        if getattr(sys, 'frozen', False):
+            # Ejecutable compilado: correr directamente el binario con el argumento CLI
+            exe_path = os.path.abspath(sys.executable)
+            cmd = [exe_path, "--run-job"]
+            working_dir = os.path.dirname(exe_path)
         else:
-            status_info["last_run_status"] = f"error (código {exit_code})"
-            logger.error(f"FALLO: {msg}")
-            # Si error de login/credenciales (código 1), pausar para evitar bloqueo de cuenta
-            if exit_code == 1:
-                status_info["is_active"] = False
-                logger.warning("Planificador desactivado automáticamente debido a error de credenciales/login.")
+            # Modo desarrollo: correr usando el intérprete de Python con el script principal
+            abs_script = os.path.join(BASE_DIR, "app_gui.py")
+            cmd = [sys.executable, abs_script, "--run-job"]
+            working_dir = BASE_DIR
 
-        save_status(status_info)
+        if dry_run:
+            cmd.append("--dry-run")
+
+        logger.info(f"Iniciando subproceso del scheduler: {' '.join(cmd)}")
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="backslashreplace",
+            cwd=working_dir,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+
+        # Leer y loguear salida en tiempo real en la consola de logs
+        for line in iter(proc.stdout.readline, ""):
+            msg = line.strip()
+            if msg:
+                logger.info(msg)
+        proc.stdout.close()
+        exit_code = proc.wait()
+        
+        logger.info(f"Subproceso del planificador finalizado con código de salida: {exit_code}")
+        
         if gui_update_callback:
             gui_update_callback()
 
     except Exception as e:
-        logger.error(f"Error crítico ejecutando automatización de almuerzo: {e}")
-        status_info = load_status()
-        status_info["last_run_timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        status_info["last_run_status"] = "error (excepción)"
-        save_status(status_info)
+        logger.error(f"Error al ejecutar el subproceso del planificador de almuerzo: {e}")
+        try:
+            status_info = load_status()
+            status_info["last_run_timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            status_info["last_run_status"] = f"error (excepción: {str(e)[:50]})"
+            save_status(status_info)
+        except Exception as se:
+            logger.error(f"No se pudo guardar el estado de excepción en status.json: {se}")
         if gui_update_callback:
             gui_update_callback()
 

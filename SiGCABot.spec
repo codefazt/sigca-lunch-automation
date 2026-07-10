@@ -20,7 +20,6 @@ a = Analysis(
     datas=[
         ('bender_chef.png', '.'),
         ('robot_hamburger_icon.png', '.'),
-        ('src', 'src'),
         ('images_info', 'images_info'),
     ],
 

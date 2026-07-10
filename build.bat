@@ -124,8 +124,8 @@ copy /y "run_job.bat" "dist\SiGCABot_Release\run_job.bat"
 copy /y "README.md" "dist\SiGCABot_Release\README.md"
 copy /y "WINDOWS_SCHEDULER.md" "dist\SiGCABot_Release\WINDOWS_SCHEDULER.md"
 
-:: Copiar carpeta de imágenes de manual
-xcopy /e /i /y "images_info" "dist\SiGCABot_Release\images_info"
+:: Copiar carpeta de imágenes de manual (Ya no es necesario, el ejecutable las lee de forma interna desde sys._MEIPASS)
+:: xcopy /e /i /y "images_info" "dist\SiGCABot_Release\images_info"
 
 :: Crear carpetas necesarias
 mkdir "dist\SiGCABot_Release\logs" 2>nul
