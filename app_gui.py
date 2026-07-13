@@ -34,6 +34,8 @@ def _parse_args():
                         help="Cancelar la solicitud de almuerzo del día.")
     parser.add_argument("--check-deps", action="store_true",
                         help="Verificar dependencias y operatividad del navegador.")
+    parser.add_argument("--from-gui", action="store_true",
+                        help="Indica que la ejecución proviene del planificador de la GUI.")
     return parser.parse_args()
 
 
@@ -90,7 +92,7 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
 
             # 4. Evitar colisión si la GUI ya está abierta en segundo plano.
             # Si el puerto 18293 está escuchando, la GUI y su scheduler interno están activos.
-            if not _args.force_time:
+            if not _args.force_time and not _args.from_gui:
                 import socket
                 gui_active = False
                 try:
@@ -1921,11 +1923,11 @@ class AppGUI:
             show_custom_error("Error de Envío", "No se pudo conectar con Telegram. Revisa el token, el Chat ID o la conexión a internet.")
 
     def run_dry_run_test(self):
-        self.run_bot_subprocess(["--run-job", "--dry-run", "--force-time"], "dry_run", "Iniciando simulación del pedido en seco (Dry Run). Por favor espera...")
+        self.run_bot_subprocess(["--run-job", "--dry-run", "--force-time", "--from-gui"], "dry_run", "Iniciando simulación del pedido en seco (Dry Run). Por favor espera...")
 
     def run_manual_order(self):
         if show_custom_confirm("Solicitud Manual", "¿Deseas forzar la ejecución del pedido AHORA MISMO?\n\nEsto ignorará cualquier cancelación previa que hayas hecho hoy."):
-            self.run_bot_subprocess(["--run-job", "--force-time"], "manual", "Iniciando solicitud manual de almuerzo. Por favor espera...")
+            self.run_bot_subprocess(["--run-job", "--force-time", "--from-gui"], "manual", "Iniciando solicitud manual de almuerzo. Por favor espera...")
 
     def confirm_cancel_lunch(self):
         status_info = load_status()
@@ -2039,7 +2041,7 @@ class AppGUI:
                 )
                 show_custom_success("Tarea Registrada (En Rango)", detail_msg)
                 self.root.after(200, lambda: self.run_bot_subprocess(
-                    ["--run-job"],
+                    ["--run-job", "--from-gui"],
                     "manual",
                     "Ejecutando primera solicitud tras registrar la tarea programada..."
                 ))

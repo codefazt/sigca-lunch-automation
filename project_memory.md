@@ -72,6 +72,12 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   2. **Timeouts Incrementales:** Aplicación de multiplicadores (1.0, 1.5, y 2.0) al timeout de la página y retrasos de navegación según el intento, aumentando las probabilidades de éxito.
   3. **Notificaciones Consolidadas:** Silenciado de alertas Toast y Telegram en intentos fallidos intermedios, enviando únicamente la notificación final correspondiente (éxito o fallo definitivo).
 
+### 11. Ejecución desde GUI con Bypass de Colisión (Versión 2.4.8)
+- **Hitos Completados:**
+  1. **Flag --from-gui:** Adición de la bandera `--from-gui` en el parser de comandos CLI de la aplicación para permitir a los subprocesos identificarse ante el proceso principal.
+  2. **Bypass de Colisión de Puerto:** Modificación del chequeo de puerto de la GUI activa (`18293`) para que omita el aborto por redundancia si el subproceso fue lanzado desde la propia interfaz de la GUI.
+  3. **Corrección de Solicitud Manual y Registro:** Actualización de todas las llamadas de subproceso en la GUI (`run_manual_order`, planificador interno de la GUI y primera solicitud tras el registro de tarea en rango) para que pasen siempre la bandera `--from-gui` y realicen el pedido web de almuerzo real sin auto-cancelarse de manera silenciosa.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
@@ -118,3 +124,7 @@ A continuación, se detallan los fallos históricos encontrados en el desarrollo
 ### 9. Fallo en Cancelación de Solicitud por Lentitud de Red (Intento Único)
 * **Fallo:** La rutina de cancelación realizaba un solo intento. Si la red corporativa o la carga de la página sufrían una ralentización temporal, la cancelación fallaba inmediatamente y spameaba notificaciones fallidas a Telegram y Toast locales.
 * **Solución:** Se envolvió el flujo en un bucle de hasta 3 intentos con timeouts y retrasos progresivamente mayores (factor 1.0, 1.5, y 2.0). Se silenciaron las alertas para los primeros dos intentos fallidos y se retrasaron hasta tener una respuesta final o agotar los intentos.
+
+### 10. Aborto Silencioso de Subprocesos Iniciados por la GUI al Detectar GUI Activa
+* **Fallo:** Cualquier ejecución de automatización iniciada por la propia GUI (como el planificador en background de la interfaz, la solicitud forzada manual, o el pedido automático inmediato al registrar la tarea) detectaba que el puerto de red `18293` de la GUI estaba escuchando, por lo que asumía erróneamente que era un job redundante del Programador de Tareas y finalizaba de inmediato con código 0 sin pedir la comida.
+* **Solución:** Se implementó la bandera `--from-gui` y se modificó la lógica de detección de colisión de puerto en `app_gui.py` para ignorar el puerto activo si el argumento `--from-gui` está presente en la línea de comandos, permitiendo que la GUI ejecute de forma exitosa sus propios subprocesos de fondo.

@@ -38,12 +38,12 @@ def run_lunch_automation_job(dry_run=False, gui_update_callback=None):
         if getattr(sys, 'frozen', False):
             # Ejecutable compilado: correr directamente el binario con el argumento CLI
             exe_path = os.path.abspath(sys.executable)
-            cmd = [exe_path, "--run-job"]
+            cmd = [exe_path, "--run-job", "--from-gui"]
             working_dir = os.path.dirname(exe_path)
         else:
             # Modo desarrollo: correr usando el intérprete de Python con el script principal
             abs_script = os.path.join(BASE_DIR, "app_gui.py")
-            cmd = [sys.executable, abs_script, "--run-job"]
+            cmd = [sys.executable, abs_script, "--run-job", "--from-gui"]
             working_dir = BASE_DIR
 
         if dry_run:

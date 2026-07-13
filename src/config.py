@@ -17,7 +17,7 @@ from datetime import datetime
 logger = logging.getLogger("SiGCABot")
 
 # Versión de la Aplicación
-APP_VERSION = "2.4.7"
+APP_VERSION = "2.4.8"
 
 # ---------------------------------------------------------------------------
 # Ofuscación / Encriptación simple de campos sensibles
