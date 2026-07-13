@@ -36,6 +36,8 @@ def _parse_args():
                         help="Verificar dependencias y operatividad del navegador.")
     parser.add_argument("--from-gui", action="store_true",
                         help="Indica que la ejecución proviene del planificador de la GUI.")
+    parser.add_argument("--manual", action="store_true",
+                        help="Indica que es una ejecución manual (ignora cancelación).")
     return parser.parse_args()
 
 
@@ -78,8 +80,8 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
                 logger.warning("El bot está desactivado ('is_active': False). Deteniendo ejecución en segundo plano.")
                 sys.exit(0)
 
-            # 2. Si el almuerzo de hoy fue cancelado y no es forzado, cancelar ejecución.
-            if status_info.get("is_cancelled_today", False) and not _args.force_time:
+            # 2. Si el almuerzo de hoy fue cancelado y no es forzado ni ejecución manual, cancelar ejecución.
+            if status_info.get("is_cancelled_today", False) and not _args.force_time and not _args.manual:
                 logger.info("El almuerzo de hoy fue cancelado por el usuario. Deteniendo ejecución en segundo plano.")
                 sys.exit(0)
 
@@ -111,7 +113,7 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
             if _args.force_time:
                 bot.is_time_valid = lambda *a, **k: True
                 logger.info("Validación horaria forzada (desactivada).")
-            exit_code, msg, evidence = bot.run_automation(dry_run=_args.dry_run)
+            exit_code, msg, evidence = bot.run_automation(dry_run=_args.dry_run, is_manual=_args.manual)
             
             # Guardar el resultado en status.json
             try:
@@ -1927,7 +1929,7 @@ class AppGUI:
 
     def run_manual_order(self):
         if show_custom_confirm("Solicitud Manual", "¿Deseas forzar la ejecución del pedido AHORA MISMO?\n\nEsto ignorará cualquier cancelación previa que hayas hecho hoy."):
-            self.run_bot_subprocess(["--run-job", "--force-time", "--from-gui"], "manual", "Iniciando solicitud manual de almuerzo. Por favor espera...")
+            self.run_bot_subprocess(["--run-job", "--force-time", "--from-gui", "--manual"], "manual", "Iniciando solicitud manual de almuerzo. Por favor espera...")
 
     def confirm_cancel_lunch(self):
         status_info = load_status()

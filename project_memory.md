@@ -78,6 +78,11 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   2. **Bypass de Colisión de Puerto:** Modificación del chequeo de puerto de la GUI activa (`18293`) para que omita el aborto por redundancia si el subproceso fue lanzado desde la propia interfaz de la GUI.
   3. **Corrección de Solicitud Manual y Registro:** Actualización de todas las llamadas de subproceso en la GUI (`run_manual_order`, planificador interno de la GUI y primera solicitud tras el registro de tarea en rango) para que pasen siempre la bandera `--from-gui` y realicen el pedido web de almuerzo real sin auto-cancelarse de manera silenciosa.
 
+### 12. Bypass de Cancelación en Solicitud Manual (Versión 2.4.9)
+- **Hitos Completados:**
+  1. **Flag --manual:** Adición de la bandera `--manual` en el parser de comandos CLI de la aplicación para permitir bypassar restricciones de cancelación de forma intencional en ejecuciones manuales.
+  2. **Bypass de Cancelación en CLI y Motor:** Configuración en la validación temprana de la CLI en `app_gui.py` y en `run_automation` dentro de `src/bot_engine.py` para ignorar la verificación de `is_cancelled_today` si `--manual` o `is_manual` está activo, posibilitando forzar el pedido.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
@@ -128,3 +133,7 @@ A continuación, se detallan los fallos históricos encontrados en el desarrollo
 ### 10. Aborto Silencioso de Subprocesos Iniciados por la GUI al Detectar GUI Activa
 * **Fallo:** Cualquier ejecución de automatización iniciada por la propia GUI (como el planificador en background de la interfaz, la solicitud forzada manual, o el pedido automático inmediato al registrar la tarea) detectaba que el puerto de red `18293` de la GUI estaba escuchando, por lo que asumía erróneamente que era un job redundante del Programador de Tareas y finalizaba de inmediato con código 0 sin pedir la comida.
 * **Solución:** Se implementó la bandera `--from-gui` y se modificó la lógica de detección de colisión de puerto en `app_gui.py` para ignorar el puerto activo si el argumento `--from-gui` está presente en la línea de comandos, permitiendo que la GUI ejecute de forma exitosa sus propios subprocesos de fondo.
+
+### 11. Solicitud Manual Cancelada por Estado de Cancelación Diaria Activo
+* **Fallo:** Si el usuario cancelaba el almuerzo del día (por ejemplo, para cambiarlo) y luego pulsaba el botón "Solicitud Manual" para forzar el pedido de nuevo, el bot CLI o el motor Playwright abortaban la ejecución de inmediato porque encontraban que el almuerzo de hoy figuraba como cancelado en `status.json`.
+* **Solución:** Se agregó la bandera `--manual` y se propagó a través de la llamada al subproceso de la GUI. Se actualizaron los controles de flujo en `app_gui.py` y en `src/bot_engine.py` para omitir la validación de cancelación diaria si la ejecución es manual.
