@@ -762,164 +762,193 @@ class LunchBot:
 
     def cancel_lunch_order(self):
         """
-        Ejecuta el flujo de cancelación de la solicitud de almuerzo.
+        Ejecuta el flujo de cancelación de la solicitud de almuerzo con hasta 3 intentos incrementales.
 
         Returns:
             Tupla (exit_code, message, evidence_path)
         """
-        try:
-            kill_playwright_orphans()
+        max_attempts = 3
+        base_timeout_ms = self.config.get("timeout_ms", 30000)
+        
+        self._notify_toast("Cancelando Almuerzo", "Iniciando proceso de cancelación en SiGCA...")
+        self._notify_telegram("🤖 <b>SiGCA Bot</b>:\nIniciando cancelación de solicitud de almuerzo...")
 
-            self._notify_toast("Cancelando Almuerzo", "Iniciando proceso de cancelación en SiGCA...")
-            self._notify_telegram("🤖 <b>SiGCA Bot</b>:\nIniciando cancelación de solicitud de almuerzo...")
+        last_exit_code = 3
+        last_msg = ""
+        last_evidence = None
 
+        for attempt in range(1, max_attempts + 1):
+            logger.info(f"Iniciando intento de cancelación {attempt}/{max_attempts}...")
+            factor = 1.0 + (attempt - 1) * 0.5
+            current_timeout_ms = int(base_timeout_ms * factor)
+            
             try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            with sync_playwright() as p:
-                headless = self.config.get("headless", True)
-                logger.info(f"Iniciando navegador Chromium (headless={headless}) para cancelación...")
-                browser = p.chromium.launch(headless=headless)
-                context = browser.new_context(
-                    viewport={"width": 1280, "height": 720},
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                )
-                timeout_ms = self.config.get("timeout_ms", 30000)
-                context.set_default_timeout(timeout_ms)
-                page = context.new_page()
-                page.set_default_timeout(timeout_ms)
+                kill_playwright_orphans()
 
                 try:
-                    # Intentar login
-                    login_success = False
-                    for pwd in self.passwords:
-                        try:
-                            if self.attempt_login(page, pwd):
-                                login_success = True
-                                break
-                        except ConnectionError as ce:
-                            logger.error(f"Error de conexión detectado. Abortando reintentos con otras contraseñas: {ce}")
-                            msg = f"Error de conexión o red al intentar cancelar: {ce}"
-                            evidence = None
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+
+                with sync_playwright() as p:
+                    headless = self.config.get("headless", True)
+                    logger.info(f"Intento {attempt}: Iniciando navegador Chromium (headless={headless}, timeout={current_timeout_ms}ms)...")
+                    browser = p.chromium.launch(headless=headless)
+                    context = browser.new_context(
+                        viewport={"width": 1280, "height": 720},
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    )
+                    context.set_default_timeout(current_timeout_ms)
+                    page = context.new_page()
+                    page.set_default_timeout(current_timeout_ms)
+
+                    try:
+                        # Intentar login
+                        login_success = False
+                        for pwd in self.passwords:
                             try:
-                                evidence = self.capture_evidence(page, "cancel_connection_failed")
-                            except Exception:
-                                pass
-                            try:
-                                browser.close()
-                            except Exception:
-                                pass
-                            self._notify_toast("Error al Cancelar - SiGCA", "No se pudo establecer comunicación con el portal.")
-                            self._notify_telegram(f"❌ <b>Error de Conexión al Cancelar</b>:\n{html.escape(msg)}")
-                            if evidence:
-                                self._notify_telegram_photo(evidence, "Error de Conexión (Cancelación)")
-                            return 3, msg, evidence
-                        except Exception as e:
-                            logger.error(f"Excepción durante intento de login para cancelación: {e}")
+                                if self.attempt_login(page, pwd):
+                                    login_success = True
+                                    break
+                            except ConnectionError as ce:
+                                logger.error(f"Intento {attempt}: Error de conexión detectado. Abortando contraseñas: {ce}")
+                                last_msg = f"Error de conexión o red al intentar cancelar: {ce}"
+                                last_evidence = None
+                                try:
+                                    last_evidence = self.capture_evidence(page, f"cancel_connection_failed_att{attempt}")
+                                except Exception:
+                                    pass
+                                try:
+                                    browser.close()
+                                except Exception:
+                                    pass
+                                raise ce
+                            except Exception as e:
+                                logger.error(f"Intento {attempt}: Excepción durante login: {e}")
 
-                    if not login_success:
-                        msg = "No se pudo iniciar sesión para realizar la cancelación."
-                        logger.error(msg)
-                        evidence = self.capture_evidence(page, "cancel_login_failed")
-                        browser.close()
-                        self._notify_toast("Error al Cancelar - SiGCA", "No se pudo iniciar sesión para cancelar.")
-                        self._notify_telegram(f"❌ <b>Fallo al Cancelar</b>:\n{html.escape(msg)}")
-                        if evidence:
-                            self._notify_telegram_photo(evidence, "Error de Login (Cancelación)")
-                        return 1, msg, evidence
+                        if not login_success:
+                            last_msg = "No se pudo iniciar sesión para realizar la cancelación."
+                            logger.error(f"Intento {attempt}: {last_msg}")
+                            last_evidence = self.capture_evidence(page, f"cancel_login_failed_att{attempt}")
+                            browser.close()
+                            raise RuntimeError(last_msg)
 
-                    # Navegación a sección de almuerzos
-                    logger.info("Navegando a la sección de almuerzos...")
-                    lunch_keywords = ["Almuerzo", "Solicitud de Almuerzo", "Pedir Almuerzo", "Menú", "Servicios"]
-                    lunch_navigated = False
-                    page.wait_for_timeout(3000)
+                        # Navegación a almuerzos
+                        logger.info(f"Intento {attempt}: Navegando a la sección de almuerzos...")
+                        lunch_keywords = ["Almuerzo", "Solicitud de Almuerzo", "Pedir Almuerzo", "Menú", "Servicios"]
+                        lunch_navigated = False
+                        page.wait_for_timeout(int(3000 * factor))
 
-                    for keyword in lunch_keywords:
-                        locator = page.get_by_text(keyword, exact=False)
-                        if locator.count() > 0:
-                            locator.first.click()
-                            page.wait_for_timeout(2000)
-                            lunch_navigated = True
-                            break
-
-                    if not lunch_navigated:
-                        nav_links = page.locator("a, button, li")
-                        for i in range(nav_links.count()):
-                            txt = nav_links.nth(i).text_content() or ""
-                            if any(kw.lower() in txt.lower() for kw in lunch_keywords):
-                                nav_links.nth(i).click()
-                                page.wait_for_timeout(2000)
+                        for keyword in lunch_keywords:
+                            locator = page.get_by_text(keyword, exact=False)
+                            if locator.count() > 0:
+                                locator.first.click()
+                                page.wait_for_timeout(int(2000 * factor))
                                 lunch_navigated = True
                                 break
 
-                    self.capture_evidence(page, "cancel_section")
+                        if not lunch_navigated:
+                            nav_links = page.locator("a, button, li")
+                            for i in range(nav_links.count()):
+                                txt = nav_links.nth(i).text_content() or ""
+                                if any(kw.lower() in txt.lower() for kw in lunch_keywords):
+                                    nav_links.nth(i).click()
+                                    page.wait_for_timeout(int(2000 * factor))
+                                    lunch_navigated = True
+                                    break
 
-                    # Buscar botón "Cancelar solicitud"
-                    cancel_button = page.locator("button:has-text('Cancelar solicitud')").first
+                        self.capture_evidence(page, f"cancel_section_att{attempt}")
 
-                    if cancel_button.count() == 0 or not cancel_button.is_visible():
-                        msg = "No se encontró ningún botón activo para cancelar la solicitud en la página."
-                        logger.warning(msg)
-                        evidence = self.capture_evidence(page, "cancel_button_not_found")
+                        # Buscar botón "Cancelar solicitud"
+                        cancel_button = page.locator("button:has-text('Cancelar solicitud')").first
+
+                        if cancel_button.count() == 0 or not cancel_button.is_visible():
+                            last_msg = "No se encontró ningún botón activo para cancelar la solicitud en la página."
+                            logger.warning(f"Intento {attempt}: {last_msg}")
+                            last_evidence = self.capture_evidence(page, f"cancel_button_not_found_att{attempt}")
+                            browser.close()
+                            raise RuntimeError(last_msg)
+
+                        if cancel_button.is_disabled():
+                            last_msg = "El botón de cancelar solicitud está deshabilitado."
+                            logger.warning(f"Intento {attempt}: {last_msg}")
+                            last_evidence = self.capture_evidence(page, f"cancel_button_disabled_att{attempt}")
+                            browser.close()
+                            raise RuntimeError(last_msg)
+
+                        # Hacer clic en cancelar
+                        logger.info(f"Intento {attempt}: Haciendo clic en el botón 'Cancelar solicitud'...")
+                        cancel_button.click()
+
+                        # Esperar modal de confirmación
+                        logger.info(f"Intento {attempt}: Esperando el modal de confirmación...")
+                        confirm_button = page.get_by_role("button", name="Sí, cancelar")
+                        confirm_button.wait_for(state="visible", timeout=int(10000 * factor))
+                        confirm_button.click()
+
+                        page.wait_for_timeout(int(3000 * factor))
+
+                        last_evidence = self.capture_evidence(page, f"cancel_success_att{attempt}")
+                        last_msg = "La solicitud de almuerzo ha sido cancelada con éxito."
+                        logger.info(f"Intento {attempt}: {last_msg}")
                         browser.close()
-                        self._notify_toast("Cancelación no Disponible", "No hay una solicitud activa que cancelar.")
-                        self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{html.escape(msg)}")
-                        if evidence:
-                            self._notify_telegram_photo(evidence, "Pantalla de Cancelación no Disponible")
-                        return 2, msg, evidence
 
-                    if cancel_button.is_disabled():
-                        msg = "El botón de cancelar solicitud está deshabilitado."
-                        logger.warning(msg)
-                        evidence = self.capture_evidence(page, "cancel_button_disabled")
-                        browser.close()
-                        self._notify_toast("Cancelación no Disponible", "El botón de cancelación está bloqueado.")
-                        self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{html.escape(msg)}")
-                        if evidence:
-                            self._notify_telegram_photo(evidence, "Botón de Cancelación Deshabilitado")
-                        return 2, msg, evidence
+                        # Éxito: Notificar de forma definitiva
+                        self._notify_toast("Cancelación Exitosa", "Tu solicitud de almuerzo ha sido cancelada correctamente.")
+                        self._notify_telegram(f"🚫 <b>Cancelación Exitosa</b>:\n{last_msg}")
+                        if last_evidence:
+                            self._notify_telegram_photo(last_evidence, "Confirmación de Cancelación")
+                        return 0, last_msg, last_evidence
 
-                    # Hacer clic en cancelar
-                    logger.info("Haciendo clic en el botón 'Cancelar solicitud'...")
-                    cancel_button.click()
+                    except Exception as inner_e:
+                        logger.error(f"Intento {attempt}: Error en flujo de cancelación interno: {inner_e}")
+                        try:
+                            last_evidence = self.capture_evidence(page, f"cancel_error_runtime_att{attempt}")
+                        except Exception:
+                            pass
+                        last_msg = str(inner_e)
+                        last_exit_code = 3
+                        try:
+                            browser.close()
+                        except Exception:
+                            pass
 
-                    # Esperar modal de confirmación
-                    logger.info("Esperando el modal de confirmación...")
-                    confirm_button = page.get_by_role("button", name="Sí, cancelar")
-                    confirm_button.wait_for(state="visible", timeout=10000)
-                    confirm_button.click()
+            except Exception as e:
+                logger.error(f"Intento {attempt}: Error crítico en el intento de cancelación: {e}")
+                last_msg = str(e)
+                last_exit_code = 3
+            finally:
+                kill_playwright_orphans()
 
-                    page.wait_for_timeout(3000)
+            # Esperar 5s antes del siguiente reintento (si aplica)
+            if attempt < max_attempts:
+                import time as time_mod
+                wait_time = 5
+                logger.info(f"Esperando {wait_time}s antes de reintentar...")
+                time_mod.sleep(wait_time)
 
-                    evidence = self.capture_evidence(page, "cancel_success")
-                    msg = "La solicitud de almuerzo ha sido cancelada con éxito."
-                    logger.info(msg)
-                    browser.close()
+        # Fallo Definitivo
+        logger.error(f"Todos los {max_attempts} intentos de cancelación fallaron. Último error: {last_msg}")
+        
+        # Filtros de mensaje amigables
+        if "No se encontró ningún botón activo" in last_msg:
+            self._notify_toast("Cancelación no Disponible", "No hay una solicitud activa que cancelar.")
+            self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{last_msg}")
+            if last_evidence:
+                self._notify_telegram_photo(last_evidence, "Pantalla de Cancelación no Disponible")
+            return 2, last_msg, last_evidence
+        
+        if "deshabilitado" in last_msg:
+            self._notify_toast("Cancelación no Disponible", "El botón de cancelación está bloqueado.")
+            self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{last_msg}")
+            if last_evidence:
+                self._notify_telegram_photo(last_evidence, "Botón de Cancelación Deshabilitado")
+            return 2, last_msg, last_evidence
 
-                    self._notify_toast("Cancelación Exitosa", "Tu solicitud de almuerzo ha sido cancelada correctamente.")
-                    self._notify_telegram(f"🚫 <b>Cancelación Exitosa</b>:\n{msg}")
-                    if evidence:
-                        self._notify_telegram_photo(evidence, "Confirmación de Cancelación")
-                    return 0, msg, evidence
-
-                except Exception as inner_e:
-                    logger.error(f"Error en flujo de cancelación: {inner_e}")
-                    evidence = self.capture_evidence(page, "cancel_error_runtime")
-                    self._notify_toast("Error al Cancelar", "Ocurrió un error inesperado al cancelar.")
-                    self._notify_telegram(f"❌ <b>Fallo al Cancelar Almuerzo</b>:\n<pre>{html.escape(str(inner_e))}</pre>")
-                    if evidence:
-                        self._notify_telegram_photo(evidence, "Captura de Error de Cancelación")
-                    browser.close()
-                    return 3, str(inner_e), evidence
-
-        except Exception as e:
-            msg = f"Error crítico durante la cancelación del almuerzo: {e}"
-            logger.error(msg, exc_info=True)
-            self._notify_toast("Error al Cancelar", "Ocurrió un error inesperado al cancelar.")
-            self._notify_telegram(f"❌ <b>Fallo al Cancelar Almuerzo</b>:\n<pre>{html.escape(msg)}</pre>")
-            return 3, msg, None
-        finally:
-            kill_playwright_orphans()
+        self._notify_toast("Error al Cancelar", "Ocurrió un error inesperado al cancelar tras 3 intentos.")
+        self._notify_telegram(f"❌ <b>Fallo al Cancelar Almuerzo (3 intentos)</b>:\n<pre>{html.escape(last_msg)}</pre>")
+        if last_evidence:
+            self._notify_telegram_photo(last_evidence, "Captura de Error de Cancelación (Último Intento)")
+            
+        return last_exit_code, last_msg, last_evidence

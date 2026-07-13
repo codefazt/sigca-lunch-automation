@@ -66,6 +66,12 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   3. **Sanitización Multilínea de Logs en Popups:** Limpieza centralizada de timestamps (`YYYY-MM-DD HH:MM:SS,mmm`), niveles `[INFO]` y códigos técnicos de salida `(código: 0)` en los diálogos emergentes, presentando al usuario final un diseño libre de tecnicismos.
   4. **Fecha Amigable en Español:** Conversión de marcas de tiempo a un formato legible y estético (ej. `13 de Julio, 11:28 AM`) en la barra lateral del aplicativo y en los modales de éxito.
 
+### 10. Robustez en Cancelación con Reintentos Incrementales (Versión 2.4.7)
+- **Hitos Completados:**
+  1. **Bucle de 3 Intentos:** Envoltura del proceso de cancelación en un bucle que realiza hasta 3 intentos en caso de lentitud o fallos temporales en la carga de la página.
+  2. **Timeouts Incrementales:** Aplicación de multiplicadores (1.0, 1.5, y 2.0) al timeout de la página y retrasos de navegación según el intento, aumentando las probabilidades de éxito.
+  3. **Notificaciones Consolidadas:** Silenciado de alertas Toast y Telegram en intentos fallidos intermedios, enviando únicamente la notificación final correspondiente (éxito o fallo definitivo).
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
@@ -108,3 +114,7 @@ A continuación, se detallan los fallos históricos encontrados en el desarrollo
   $tempTrigger = New-ScheduledTaskTrigger -Once -At '{trigger_time}' -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Hours 18)
   $trigger.Repetition = $tempTrigger.Repetition
   ```
+
+### 9. Fallo en Cancelación de Solicitud por Lentitud de Red (Intento Único)
+* **Fallo:** La rutina de cancelación realizaba un solo intento. Si la red corporativa o la carga de la página sufrían una ralentización temporal, la cancelación fallaba inmediatamente y spameaba notificaciones fallidas a Telegram y Toast locales.
+* **Solución:** Se envolvió el flujo en un bucle de hasta 3 intentos con timeouts y retrasos progresivamente mayores (factor 1.0, 1.5, y 2.0). Se silenciaron las alertas para los primeros dos intentos fallidos y se retrasaron hasta tener una respuesta final o agotar los intentos.
