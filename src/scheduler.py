@@ -239,6 +239,8 @@ def register_windows_task(trigger_hour=16, trigger_minute=30):
             "try {\r\n"
             f"    $action = New-ScheduledTaskAction -Execute '{execute}' -Argument '{arguments}' -WorkingDirectory '{working_dir}';\r\n"
             f"    $trigger = New-ScheduledTaskTrigger -Daily -At '{trigger_time}';\r\n"
+            f"    $tempTrigger = New-ScheduledTaskTrigger -Once -At '{trigger_time}' -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Hours 18);\r\n"
+            f"    $trigger.Repetition = $tempTrigger.Repetition;\r\n"
             f"    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 10);\r\n"
             f"    Register-ScheduledTask -TaskName '{TASK_NAME}' -Trigger $trigger -Action $action -Settings $settings "
             f"-Description 'Job automatico diario para solicitar almuerzo en SiGCA' -Force;\r\n"

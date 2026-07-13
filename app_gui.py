@@ -252,7 +252,7 @@ def _update_gui_status_badge_sync():
 
     # Actualizar labels e historial de estado
     if hasattr(app, "last_run_lbl") and app.last_run_lbl.winfo_exists():
-        lr_date = status_info.get("last_run_timestamp", "Nunca")
+        lr_date = format_friendly_date(status_info.get("last_run_timestamp", "Nunca"))
         app.last_run_lbl.configure(text=f"Último pedido:\n{lr_date}")
     if hasattr(app, "last_status_lbl") and app.last_status_lbl.winfo_exists():
         raw_status = status_info.get('last_run_status', 'N/A')
@@ -277,7 +277,7 @@ def _update_gui_status_badge_sync():
         app.cancelled_var.set(status_info.get("is_cancelled_today", False))
         
     if hasattr(app, "cancel_date_lbl") and app.cancel_date_lbl.winfo_exists():
-        cancel_date = status_info.get("last_cancellation_date", "")
+        cancel_date = format_friendly_date(status_info.get("last_cancellation_date", ""))
         app.cancel_date_lbl.configure(text=f"Cancelado el: {cancel_date}" if cancel_date else "Cancelado el: N/A")
 
 
@@ -420,7 +420,66 @@ class PremiumMessageBox(tk.Toplevel):
         return f"#{darkened[0]:02x}{darkened[1]:02x}{darkened[2]:02x}"
 
 
+def format_friendly_date(date_str):
+    if not date_str or date_str == "Nunca":
+        return "Nunca"
+    try:
+        clean_date_str = date_str.split(',')[0].strip()
+        try:
+            dt = datetime.strptime(clean_date_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            try:
+                dt = datetime.strptime(clean_date_str, "%Y-%m-%d %H:%M")
+            except ValueError:
+                dt = datetime.strptime(clean_date_str, "%Y-%m-%d")
+                meses = {
+                    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+                    5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+                    9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+                }
+                return f"{dt.day} de {meses[dt.month]}"
+
+        meses = {
+            1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+            5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+            9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+        }
+        dia = dt.day
+        mes = meses[dt.month]
+
+        # Formatear la hora en 12 horas AM/PM
+        hora_12 = dt.strftime("%I:%M %p").lstrip('0')
+        hora_12 = hora_12.replace('am', 'AM').replace('pm', 'PM')
+        return f"{dia} de {mes}, {hora_12}"
+    except Exception:
+        return date_str
+
+
+def clean_log_message_for_user(msg):
+    if not msg:
+        return ""
+    import re
+
+    def replace_date(match):
+        raw_date = match.group(0)
+        return format_friendly_date(raw_date) + " - "
+
+    # 1. Buscar y reemplazar timestamps de log por su versión amigable en cualquier parte del texto
+    msg = re.sub(r'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:,\d{3})?', replace_date, msg)
+    # 2. Quitar niveles de log como [INFO], [WARN], [WARNING], [ERROR], [CRITICAL] en cualquier parte
+    msg = re.sub(r'\[(?:INFO|WARN|WARNING|ERROR|CRITICAL)\]\s*', '', msg)
+    # 3. Quitar prefijos comunes de log de ejecución
+    msg = re.sub(r'Ejecución completada:\s*', '', msg, flags=re.IGNORECASE)
+    # 4. Quitar detalles del código de salida
+    msg = re.sub(r'\s*\(código:\s*\d+\)\s*', '', msg, flags=re.IGNORECASE)
+    msg = re.sub(r'\s*\(código\s*\d+\)\s*', '', msg, flags=re.IGNORECASE)
+    # Limpiar espacios extra y guiones repetidos
+    msg = re.sub(r'\s+-\s+-\s+', ' - ', msg)
+    return msg.strip()
+
+
 def show_custom_info(title, message):
+    message = clean_log_message_for_user(message)
     if app and app.root:
         dialog = PremiumMessageBox(app.root, title, message, "info")
         app.root.wait_window(dialog)
@@ -428,6 +487,7 @@ def show_custom_info(title, message):
         messagebox.showinfo(title, message)
 
 def show_custom_success(title, message):
+    message = clean_log_message_for_user(message)
     if app and app.root:
         dialog = PremiumMessageBox(app.root, title, message, "success")
         app.root.wait_window(dialog)
@@ -435,6 +495,7 @@ def show_custom_success(title, message):
         messagebox.showinfo(title, message)
 
 def show_custom_error(title, message):
+    message = clean_log_message_for_user(message)
     if app and app.root:
         dialog = PremiumMessageBox(app.root, title, message, "error")
         app.root.wait_window(dialog)
@@ -442,6 +503,7 @@ def show_custom_error(title, message):
         messagebox.showerror(title, message)
 
 def show_custom_warning(title, message):
+    message = clean_log_message_for_user(message)
     if app and app.root:
         dialog = PremiumMessageBox(app.root, title, message, "warning")
         app.root.wait_window(dialog)
@@ -1939,7 +2001,7 @@ class AppGUI:
 
         def run_register():
             success, msg = register_windows_task(trigger_hour=hour, trigger_minute=minute)
-            self.root.after(0, lambda: self._finish_task_action(success, msg))
+            self.root.after(0, lambda: self._finish_task_action(success, msg, action_type="register"))
 
         threading.Thread(target=run_register, daemon=True).start()
 
@@ -1950,15 +2012,45 @@ class AppGUI:
 
         def run_unregister():
             success, msg = unregister_windows_task()
-            self.root.after(0, lambda: self._finish_task_action(success, msg))
+            self.root.after(0, lambda: self._finish_task_action(success, msg, action_type="unregister"))
 
         threading.Thread(target=run_unregister, daemon=True).start()
 
-    def _finish_task_action(self, success, msg):
+    def _finish_task_action(self, success, msg, action_type="register"):
         self.hide_loading()
         self._refresh_task_status()
         if success:
-            show_custom_success("Operación Exitosa", msg)
+            if action_type == "unregister":
+                show_custom_success("Tarea Eliminada", msg)
+                return
+
+            try:
+                bot = LunchBot()
+                in_range = bot.is_time_valid()
+            except Exception as e:
+                logger.error(f"Error al verificar rango horario al registrar tarea: {e}")
+                in_range = False
+
+            if in_range:
+                detail_msg = (
+                    f"{msg}\n\n"
+                    "Dado que actualmente te encuentras dentro del rango horario de solicitud, "
+                    "el bot iniciará una petición en segundo plano en este momento para asegurar tu almuerzo."
+                )
+                show_custom_success("Tarea Registrada (En Rango)", detail_msg)
+                self.root.after(200, lambda: self.run_bot_subprocess(
+                    ["--run-job"],
+                    "manual",
+                    "Ejecutando primera solicitud tras registrar la tarea programada..."
+                ))
+            else:
+                detail_msg = (
+                    f"{msg}\n\n"
+                    "Notificación: Actualmente no estás en el rango de solicitud disponible (3:30 PM - 9:59 AM). "
+                    "No se iniciará una solicitud en este momento, pero en cuanto el formulario esté habilitado "
+                    "y comience el rango de tiempo configurado, el bot solicitará el almuerzo de forma automática."
+                )
+                show_custom_success("Tarea Registrada (Fuera de Rango)", detail_msg)
         else:
             show_custom_error("Error de Operación", msg)
 

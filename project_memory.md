@@ -59,6 +59,13 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
    - Tkinter maneja todas las llamadas UI usando colas y variables compartidas (`app_gui.py` desacoplado de la lógica bloqueante).
 7. **Resolución de Error de Consola en Windows (.exe):** Se configuró explícitamente `encoding='utf-8'` y manejo de excepciones en todos los comandos de stdout para que el empaquetado `console=False` no crashee en sistemas Windows en español (cp1252).
 
+### 9. Tarea Programada Repetitiva, Fechas Amigables y Notificaciones Saneadas (Versión 2.4.6)
+- **Hitos Completados:**
+  1. **Disparo Repetitivo Horario:** Configuración automática en el Programador de Windows para que la tarea diaria se repita cada 1 hora por 18 horas, logrando robustez ante apagados de la máquina o suspensión.
+  2. **Validación al Registrar:** Al crear la tarea por primera vez o re-registrarla, la GUI detecta si está en rango de solicitud para lanzar una petición asíncrona de fondo inmediatamente o notificar que está fuera de rango pero programada.
+  3. **Sanitización Multilínea de Logs en Popups:** Limpieza centralizada de timestamps (`YYYY-MM-DD HH:MM:SS,mmm`), niveles `[INFO]` y códigos técnicos de salida `(código: 0)` en los diálogos emergentes, presentando al usuario final un diseño libre de tecnicismos.
+  4. **Fecha Amigable en Español:** Conversión de marcas de tiempo a un formato legible y estético (ej. `13 de Julio, 11:28 AM`) en la barra lateral del aplicativo y en los modales de éxito.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
@@ -92,3 +99,12 @@ A continuación, se detallan los fallos históricos encontrados en el desarrollo
 ### 7. Error del Codificador 'charmap' de Windows (Emojis)
 * **Fallo:** El registro de eventos con emojis generaba `UnicodeEncodeError` en la consola de Windows (que usa codificación CP1252), provocando el colapso de la aplicación.
 * **Solución:** Se forzó a `sys.stdout` y `sys.stderr` a usar codificación UTF-8 con la política de reemplazo `errors="backslashreplace"` para imprimir emojis y caracteres especiales de forma segura.
+
+### 8. Error de Propiedad 'Interval' al Configurar Trigger Diario en PowerShell 5.1
+* **Fallo:** Al registrar la tarea programada repetitiva mediante PowerShell 5.1 en Windows 10/11, la asignación de repetición `$trigger.Repetition.Interval = 'PT1H'` fallaba con `PropertyNotFound` porque `New-ScheduledTaskTrigger -Daily` no expone de forma activa el objeto de repetición CIM.
+* **Solución:** Se utilizó un trigger temporal `-Once` (que sí tiene el objeto `Repetition` instanciado por defecto) y se le copió su configuración de repetición al trigger `-Daily`:
+  ```powershell
+  $trigger = New-ScheduledTaskTrigger -Daily -At '{trigger_time}'
+  $tempTrigger = New-ScheduledTaskTrigger -Once -At '{trigger_time}' -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Hours 18)
+  $trigger.Repetition = $tempTrigger.Repetition
+  ```
