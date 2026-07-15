@@ -2558,7 +2558,7 @@ class AppGUI:
             self._finish_subprocess(5, f"No se pudo iniciar el subproceso: {e}")
 
     def _poll_subprocess(self):
-        """Sondea el estado del subproceso y maneja el timeout de (1 minuto)."""
+        """Sondea el estado del subproceso y maneja el timeout dinámico."""
         proc = self.active_subprocess
         if proc is None:
             return
@@ -2569,10 +2569,22 @@ class AppGUI:
             self._finish_subprocess(ret_code, f"El proceso terminó con código {ret_code}")
             return
 
-        # Verificar si se superó el tiempo límite (1 minuto)
+        # Determinar el límite de tiempo dinámico según el tipo de operación
+        timeout = 60  # Por defecto 1 minuto
+        if self.subprocess_type == "manual":
+            timeout = 300  # 5 minutos para dar margen a los 3 intentos incrementales de solicitud
+        elif self.subprocess_type == "cancel":
+            timeout = 180  # 3 minutos para los 3 intentos incrementales de cancelación
+        elif self.subprocess_type == "dry_run":
+            timeout = 90   # 1.5 minutos para simulación (Dry Run)
+
+        # Verificar si se superó el tiempo límite
         elapsed = time.time() - self.subprocess_start_time
-        if elapsed > 60:
-            logger.warning(f"Límite de tiempo excedido (1 minuto) para la operación: {self.subprocess_type}. Forzando detención...")
+        if elapsed > timeout:
+            minutes_str = f"{timeout // 60} minutos" if timeout >= 60 else f"{timeout} segundos"
+            if timeout == 90:
+                minutes_str = "1.5 minutos"
+            logger.warning(f"Límite de tiempo excedido ({minutes_str}) para la operación: {self.subprocess_type}. Forzando detención...")
             self._terminate_active_subprocess(timed_out=True)
             return
 

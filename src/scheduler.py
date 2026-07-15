@@ -102,6 +102,7 @@ def start_scheduler(gui_update_callback=None):
     logger.info("Hilo Planificador iniciado. Buscando ventana horaria configurada.")
     # Delay inicial de 5 segundos para permitir que la GUI se renderice y complete el chequeo inicial de dependencias
     time.sleep(5)
+    is_first_check = True
     while not state.stop_threads:
         try:
             status_info = load_status()
@@ -143,14 +144,17 @@ def start_scheduler(gui_update_callback=None):
                     last_run_str = status_info.get("last_run_timestamp", "")
                     should_run = True
 
-                    if last_run_str and last_run_str != "Nunca":
-                        try:
-                            last_run_time = datetime.strptime(last_run_str, "%Y-%m-%d %H:%M:%S")
-                            elapsed = (datetime.now() - last_run_time).total_seconds()
-                            if elapsed < retry_delay:
-                                should_run = False
-                        except Exception:
-                            pass
+                    if is_first_check:
+                        logger.info("Primer chequeo tras inicio de la aplicación: Omitiendo cooldown de reintento.")
+                    else:
+                        if last_run_str and last_run_str != "Nunca":
+                            try:
+                                last_run_time = datetime.strptime(last_run_str, "%Y-%m-%d %H:%M:%S")
+                                elapsed = (datetime.now() - last_run_time).total_seconds()
+                                if elapsed < retry_delay:
+                                    should_run = False
+                            except Exception:
+                                pass
 
                     if should_run:
                         # Verificar ventana horaria directamente sin crear LunchBot
@@ -172,6 +176,7 @@ def start_scheduler(gui_update_callback=None):
             logger.error(f"Error en ciclo del planificador: {e}")
 
         # Esperar 60 segundos antes del siguiente chequeo
+        is_first_check = False
         time.sleep(60)
 
 

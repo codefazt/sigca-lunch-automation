@@ -401,7 +401,7 @@ class LunchBot:
 
     def run_automation(self, dry_run=False, is_manual=False):
         """
-        Ejecuta el flujo completo de solicitud de almuerzo.
+        Ejecuta el flujo completo de solicitud de almuerzo con hasta 3 intentos incrementales.
 
         Args:
             dry_run: Si es True, no confirma el pedido final.
@@ -415,6 +415,8 @@ class LunchBot:
             - exit_code 3: error crítico
         """
         sim_str = " (SIMULACIÓN)" if dry_run else ""
+        
+        # 1. Validaciones tempranas y estáticas (se ejecutan antes del navegador)
         try:
             if not is_manual:
                 status_data = load_status()
@@ -445,316 +447,363 @@ class LunchBot:
                 msg = "Fuera de horario de ejecución (3:30 PM - 9:59 AM)."
                 logger.warning(msg)
                 return 0, msg, None
+                
+        except Exception as e:
+            msg = f"Error en validaciones iniciales de automatización: {e}"
+            logger.error(msg, exc_info=True)
+            return 3, msg, None
 
-            kill_playwright_orphans()
+        # 2. Configurar bucle de reintentos incrementales (hasta 3 intentos)
+        max_attempts = 3
+        base_timeout_ms = 60000  # 1 minuto base para solicitud
+        
+        last_exit_code = 3
+        last_msg = ""
+        last_evidence = None
 
-            # Asegurar bucle de eventos asyncio en este hilo
+        for attempt in range(1, max_attempts + 1):
+            logger.info(f"Iniciando intento de solicitud {attempt}/{max_attempts}...")
+            factor = 1.0 + (attempt - 1) * 0.5
+            current_timeout_ms = int(base_timeout_ms * factor)
+            
             try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                kill_playwright_orphans()
 
-            self._notify_toast(f"Iniciando Bot{sim_str}", "Comenzando automatización del almuerzo en SiGCA...")
-            self._notify_telegram(f"🤖 <b>SiGCA Bot{sim_str}</b>:\nComenzando automatización del almuerzo...")
+                # Asegurar bucle de eventos asyncio en este hilo
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
 
-            with sync_playwright() as p:
-                headless = self.config.get("headless", True)
-                logger.info(f"Iniciando navegador Chromium (headless={headless})...")
-                self._notify_telegram("🌐 <b>Navegador</b>:\nIniciando navegador Chromium en segundo plano...")
+                if attempt == 1:
+                    self._notify_toast(f"Iniciando Bot{sim_str}", "Comenzando automatización del almuerzo en SiGCA...")
+                    self._notify_telegram(f"🤖 <b>SiGCA Bot{sim_str}</b>:\nComenzando automatización del almuerzo...")
 
-                browser = p.chromium.launch(headless=headless)
-                context = browser.new_context(
-                    viewport={"width": 1280, "height": 720},
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                )
-                timeout_ms = self.config.get("timeout_ms", 30000)
-                context.set_default_timeout(timeout_ms)
-                page = context.new_page()
-                page.set_default_timeout(timeout_ms)
+                with sync_playwright() as p:
+                    headless = self.config.get("headless", True)
+                    logger.info(f"Intento {attempt}: Iniciando navegador Chromium (headless={headless}, timeout={current_timeout_ms}ms)...")
+                    if attempt == 1:
+                        self._notify_telegram("🌐 <b>Navegador</b>:\nIniciando navegador Chromium en segundo plano...")
 
-                # Intentar login
-                self._notify_telegram("🔑 <b>Autenticación</b>:\nNavegador iniciado. Intentando iniciar sesión...")
-                login_success = False
-                for pwd in self.passwords:
-                    try:
-                        if self.attempt_login(page, pwd):
-                            login_success = True
-                            break
-                    except ConnectionError as ce:
-                        logger.error(f"Error de conexión detectado. Abortando reintentos con otras contraseñas: {ce}")
-                        msg = f"Error de conexión o red al acceder a SiGCA: {ce}"
-                        evidence = None
+                    browser = p.chromium.launch(headless=headless)
+                    context = browser.new_context(
+                        viewport={"width": 1280, "height": 720},
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    )
+                    context.set_default_timeout(current_timeout_ms)
+                    page = context.new_page()
+                    page.set_default_timeout(current_timeout_ms)
+
+                    # Intentar login
+                    if attempt == 1:
+                        self._notify_telegram("🔑 <b>Autenticación</b>:\nNavegador iniciado. Intentando iniciar sesión...")
+                    
+                    login_success = False
+                    for pwd in self.passwords:
                         try:
-                            evidence = self.capture_evidence(page, "connection_failed")
+                            if self.attempt_login(page, pwd):
+                                login_success = True
+                                break
+                        except ConnectionError as ce:
+                            logger.error(f"Intento {attempt}: Error de conexión detectado. Abortando contraseñas: {ce}")
+                            last_msg = f"Error de conexión o red al acceder a SiGCA: {ce}"
+                            last_evidence = None
+                            try:
+                                last_evidence = self.capture_evidence(page, f"connection_failed_att{attempt}")
+                            except Exception:
+                                pass
+                            try:
+                                browser.close()
+                            except Exception:
+                                pass
+                            raise ce
+                        except Exception as e:
+                            logger.error(f"Intento {attempt}: Excepción durante login: {e}")
+                            try:
+                                self.capture_evidence(page, f"login_error_exception_att{attempt}")
+                            except Exception:
+                                pass
+
+                    if not login_success:
+                        last_msg = "No se pudo iniciar sesión con ninguna de las contraseñas provistas."
+                        logger.error(f"Intento {attempt}: {last_msg}")
+                        last_evidence = self.capture_evidence(page, f"login_failed_att{attempt}")
+                        browser.close()
+                        # Si es un error de credenciales incorrectas permanente, no reintentamos
+                        self._notify_toast("Error de Login - SiGCA", "No se pudo iniciar sesión. Revisa tus credenciales.")
+                        self._notify_telegram(f"❌ <b>Error de Inicio de Sesión SiGCA</b>:\n{html.escape(last_msg)}")
+                        if last_evidence:
+                            self._notify_telegram_photo(last_evidence, "Error de Inicio de Sesión")
+                        return 1, last_msg, last_evidence
+
+                    try:
+                        # --- Navegación a la sección de almuerzo ---
+                        logger.info(f"Intento {attempt}: Navegando a la sección de almuerzo/pedidos...")
+                        if attempt == 1:
+                            self._notify_telegram("🍱 <b>Sección de Almuerzos</b>:\nBuscando el formulario de solicitud...")
+
+                        lunch_keywords = ["Almuerzo", "Solicitud de Almuerzo", "Pedir Almuerzo", "Menú", "Servicios"]
+                        lunch_navigated = False
+                        page.wait_for_timeout(int(3000 * factor))
+
+                        for keyword in lunch_keywords:
+                            locator = page.get_by_text(keyword, exact=False)
+                            if locator.count() > 0:
+                                logger.info(f"Se encontró enlace/botón de navegación con palabra clave '{keyword}'. Haciendo clic...")
+                                locator.first.click()
+                                page.wait_for_timeout(int(2000 * factor))
+                                lunch_navigated = True
+                                break
+
+                        if not lunch_navigated:
+                            logger.warning("No se encontró link directo. Buscando en elementos del menú...")
+                            self.capture_evidence(page, f"dashboard_search_att{attempt}")
+                            nav_links = page.locator("a, button, li")
+                            for i in range(nav_links.count()):
+                                txt = nav_links.nth(i).text_content() or ""
+                                if any(kw.lower() in txt.lower() for kw in lunch_keywords):
+                                    logger.info(f"Haciendo clic en el menú '{txt.strip()}'...")
+                                    nav_links.nth(i).click()
+                                    page.wait_for_timeout(int(2000 * factor))
+                                    lunch_navigated = True
+                                    break
+
+                        self.capture_evidence(page, f"lunch_section_att{attempt}")
+
+                        # Verificar si ya fue solicitado
+                        page_text = page.content().lower()
+                        already_ordered_keywords = [
+                            "ya solicitado", "solicitado con éxito", "almuerzo pedido",
+                            "pedido registrado", "ya has solicitado", "solicitud registrada",
+                            "has realizado tu solicitud", "tu pedido ha sido procesado exitosamente",
+                            "¡solicitud registrada!"
+                        ]
+
+                        already_ordered = False
+                        for kw in already_ordered_keywords:
+                            if kw in page_text:
+                                logger.info(f"Se detectó almuerzo ya solicitado previamente (coincidencia con '{kw}').")
+                                already_ordered = True
+                                break
+
+                        if already_ordered:
+                            last_msg = "El almuerzo ya ha sido solicitado para hoy/mañana. No se requiere acción adicional."
+                            logger.info(last_msg)
+                            last_evidence = self.capture_evidence(page, f"lunch_already_ordered_att{attempt}")
+                            browser.close()
+                            self._notify_toast("Almuerzo Ya Solicitado", "El almuerzo ya fue solicitado previamente.")
+                            self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{html.escape(last_msg)}")
+                            return 0, last_msg, last_evidence
+
+                        # Verificar si el formulario está cerrado
+                        closed_keywords = ["formulario cerrado", "el horario de solicitud de almuerzo ha finalizado"]
+                        is_closed = False
+                        for kw in closed_keywords:
+                            if kw in page_text:
+                                logger.warning(f"Se detectó que el formulario está cerrado (coincidencia con '{kw}').")
+                                is_closed = True
+                                break
+
+                        if is_closed:
+                            last_msg = "El formulario de solicitud de almuerzo está cerrado y no se pudo realizar el pedido."
+                            logger.error(last_msg)
+                            last_evidence = self.capture_evidence(page, f"lunch_form_closed_att{attempt}")
+                            browser.close()
+                            self._notify_toast("Formulario Cerrado - SiGCA", "El horario de solicitud ha finalizado.")
+                            self._notify_telegram(f"⚠️ <b>Formulario Cerrado en SiGCA</b>:\n{html.escape(last_msg)}")
+                            if last_evidence:
+                                self._notify_telegram_photo(last_evidence, "Formulario Cerrado")
+                            return 2, last_msg, last_evidence
+
+                        # --- Selección de Menú ---
+                        prefer_menu = self.config.get("prefer_menu", "saludable").lower()
+                        logger.info(f"Preferencia de menú configurada: {prefer_menu}")
+                        if attempt == 1:
+                            self._notify_telegram(f"📝 <b>Selección de Menú</b>:\nIntentando seleccionar el menú favorito: <code>{html.escape(prefer_menu.capitalize())}</code>...")
+
+                        menu_selected = False
+                        try:
+                            target_label = "Saludable" if prefer_menu == "saludable" else "Estándar"
+                            alternative_label = "Estándar" if prefer_menu == "saludable" else "Saludable"
+
+                            menu_selectors = [
+                                f"text={target_label}",
+                                f"input[value*='{target_label.lower()}']",
+                                f"label:has-text('{target_label}')",
+                                f"span:has-text('{target_label}')"
+                            ]
+
+                            for sel in menu_selectors:
+                                loc = page.locator(sel)
+                                if loc.count() > 0 and loc.first.is_visible():
+                                    logger.info(f"Seleccionando menú preferido clicking en: '{sel}'")
+                                    loc.first.click()
+                                    page.wait_for_timeout(int(1000 * factor))
+                                    menu_selected = True
+                                    break
+
+                            if not menu_selected:
+                                logger.warning(f"No se pudo seleccionar el menú preferido '{target_label}'. Intentando alternativo '{alternative_label}'...")
+                                alt_selectors = [
+                                    f"text={alternative_label}",
+                                    f"input[value*='{alternative_label.lower()}']",
+                                    f"label:has-text('{alternative_label}')",
+                                    f"span:has-text('{alternative_label}')"
+                                ]
+                                for sel in alt_selectors:
+                                    loc = page.locator(sel)
+                                    if loc.count() > 0 and loc.first.is_visible():
+                                        logger.info(f"Seleccionando menú alternativo clicking en: '{sel}'")
+                                        loc.first.click()
+                                        page.wait_for_timeout(int(1000 * factor))
+                                        menu_selected = True
+                                        break
+                        except Exception as e:
+                            logger.error(f"Error intentando seleccionar la opción de menú: {e}")
+
+                        # --- Rellenar campos condicionales si existen ---
+                        logger.info("Verificando existencia de campos del formulario adicional...")
+
+                        q_config = self.config.get("questionnaire", {})
+                        ubicacion_val = q_config.get("ubicacion", "Sede ExCle")
+                        estrellas_val = q_config.get("estrellas", "3")
+                        bien_cocidos_val = q_config.get("bien_cocidos", "last")
+                        porcion_acorde_val = q_config.get("porcion_acorde", "last")
+                        condimentacion_val = q_config.get("condimentacion", 1)
+                        asistir_tarde_val = q_config.get("asistir_tarde", "Sí")
+                        comentario_val = q_config.get("comentario", "Favor quitar el jugo de melon y las porciones no tienen suficiente proteina, quedando uno con hambre")
+
+                        if page.get_by_text("Ubicación", exact=False).count() > 0:
+                            self.fill_form_field(page, "Ubicación", "select", ubicacion_val)
+
+                        if page.get_by_text("De 1 a 5 estrellas", exact=False).count() > 0:
+                            self.fill_form_field(page, "De 1 a 5 estrellas", "radio", estrellas_val)
+
+                        if page.get_by_text("bien cocidos", exact=False).count() > 0:
+                            self.fill_form_field(page, "bien cocidos", "select", bien_cocidos_val)
+
+                        if page.get_by_text("porción estaba acorde", exact=False).count() > 0:
+                            self.fill_form_field(page, "porción estaba acorde", "select", porcion_acorde_val)
+
+                        if page.get_by_text("condimentación de la comida", exact=False).count() > 0:
+                            try:
+                                cond_val = int(condimentacion_val)
+                            except ValueError:
+                                cond_val = condimentacion_val
+                            self.fill_form_field(page, "condimentación de la comida", "select", cond_val)
+
+                        if page.get_by_text("asistir después de la 01:30", exact=False).count() > 0:
+                            self.fill_form_field(page, "asistir después de la 01:30", "radio", asistir_tarde_val)
+
+                        if page.get_by_text("comentario acerca del plato", exact=False).count() > 0:
+                            self.fill_form_field(page, "comentario acerca del plato", "text", comentario_val)
+
+                        last_evidence = self.capture_evidence(page, f"form_filled_att{attempt}")
+
+                        # --- Buscar botón de envío ---
+                        submit_buttons = ["Solicitar", "Pedir Almuerzo", "Guardar", "Confirmar", "Enviar", "Aceptar"]
+                        button_found = None
+
+                        for btn_text in submit_buttons:
+                            btn_locator = page.get_by_role("button", name=btn_text, exact=False)
+                            if btn_locator.count() > 0 and btn_locator.first.is_visible():
+                                button_found = btn_locator.first
+                                logger.info(f"Se encontró botón de acción: '{btn_text}'")
+                                break
+                            text_locator = page.get_by_text(btn_text, exact=True)
+                            if text_locator.count() > 0 and text_locator.first.is_visible():
+                                button_found = text_locator.first
+                                logger.info(f"Se encontró elemento clicable con texto: '{btn_text}'")
+                                break
+
+                        if not button_found:
+                            last_msg = "No se pudo identificar el botón o formulario de pedido de almuerzo en la página."
+                            logger.error(f"Intento {attempt}: {last_msg}")
+                            last_evidence = self.capture_evidence(page, f"lunch_form_not_found_att{attempt}")
+                            browser.close()
+                            raise RuntimeError(last_msg)
+
+                        if dry_run:
+                            last_msg = "[DRY RUN] Se encontró el botón de pedido pero NO se hizo clic para no generar un pedido real."
+                            logger.info(last_msg)
+                            last_evidence = self.capture_evidence(page, f"dry_run_success_att{attempt}")
+                            browser.close()
+                            self._notify_toast("Prueba de Pedido (Dry-Run)", "Simulación completada con éxito.")
+                            self._notify_telegram(f"🤖 <b>Prueba Dry-Run Exitosa</b>:\n{html.escape(last_msg)}")
+                            if last_evidence:
+                                self._notify_telegram_photo(last_evidence, "Dry Run Completado")
+                            return 0, last_msg, last_evidence
+                        else:
+                            logger.info("Haciendo clic en el botón de solicitud...")
+                            button_found.click()
+
+                            status_text = "El mensaje de éxito apareció en pantalla. Solicitud confirmada."
+                            try:
+                                success_message = page.get_by_text("Solicitud Registrada", exact=False).or_(
+                                    page.get_by_text("procesado exitosamente", exact=False)
+                                ).first
+                                success_message.wait_for(state="visible", timeout=int(10000 * factor))
+                                logger.info(status_text)
+                            except PlaywrightTimeoutError:
+                                status_text = "No se detectó el mensaje de éxito después de enviar. Puede que esté lento o haya fallado."
+                                logger.warning(status_text)
+
+                            last_evidence = self.capture_evidence(page, f"post_order_click_att{attempt}")
+                            last_msg = f"Solicitud exitosa: {status_text}"
+                            logger.info("Flujo de solicitud completado. Registrando éxito.")
+                            browser.close()
+
+                            self._notify_toast("Almuerzo Solicitado", "¡La solicitud de almuerzo ha sido registrada exitosamente!")
+                            self._notify_telegram(f"✅ <b>Almuerzo Solicitado Exitosamente</b>:\n{html.escape(status_text)}")
+                            if last_evidence:
+                                self._notify_telegram_photo(last_evidence, "Confirmación de Pedido")
+                            return 0, last_msg, last_evidence
+
+                    except Exception as inner_e:
+                        logger.error(f"Intento {attempt}: Error en flujo de automatización: {inner_e}")
+                        try:
+                            last_evidence = self.capture_evidence(page, f"error_runtime_att{attempt}")
                         except Exception:
                             pass
+                        last_msg = str(inner_e)
+                        last_exit_code = 3
                         try:
                             browser.close()
                         except Exception:
                             pass
-                        self._notify_toast("Error de Conexión - SiGCA", "No se pudo establecer comunicación con el portal.")
-                        self._notify_telegram(f"❌ <b>Error de Conexión SiGCA</b>:\n{html.escape(msg)}")
-                        if evidence:
-                            self._notify_telegram_photo(evidence, "Error de Conexión")
-                        return 3, msg, evidence
-                    except Exception as e:
-                        logger.error(f"Excepción durante intento de login: {e}")
-                        self.capture_evidence(page, "login_error_exception")
 
-                if not login_success:
-                    msg = "No se pudo iniciar sesión con ninguna de las contraseñas provistas."
-                    logger.error(msg)
-                    evidence = self.capture_evidence(page, "login_failed_all_attempts")
-                    browser.close()
-                    self._notify_toast("Error de Login - SiGCA", "No se pudo iniciar sesión. Revisa tus credenciales.")
-                    self._notify_telegram(f"❌ <b>Error de Inicio de Sesión SiGCA</b>:\n{html.escape(msg)}")
-                    if evidence:
-                        self._notify_telegram_photo(evidence, "Error de Inicio de Sesión")
-                    return 1, msg, evidence
+            except Exception as e:
+                logger.error(f"Intento {attempt}: Error crítico en el intento de solicitud: {e}")
+                last_msg = str(e)
+                last_exit_code = 3
+            finally:
+                kill_playwright_orphans()
 
-                try:
-                    # --- Navegación a la sección de almuerzo ---
-                    logger.info("Navegando a la sección de almuerzo/pedidos...")
-                    self._notify_telegram("🍱 <b>Sección de Almuerzos</b>:\nBuscando el formulario de solicitud...")
+            # Esperar 5s antes del siguiente reintento (si aplica)
+            if attempt < max_attempts:
+                import time as time_mod
+                wait_time = 5
+                logger.info(f"Esperando {wait_time}s antes de reintentar...")
+                time_mod.sleep(wait_time)
 
-                    lunch_keywords = ["Almuerzo", "Solicitud de Almuerzo", "Pedir Almuerzo", "Menú", "Servicios"]
-                    lunch_navigated = False
-                    page.wait_for_timeout(3000)
+        # Fallo Definitivo tras 3 intentos
+        logger.error(f"Todos los {max_attempts} intentos de solicitud fallaron. Último error: {last_msg}")
+        
+        # Filtros de mensaje amigables
+        if "No se pudo identificar el botón" in last_msg:
+            self._notify_toast("Error de Pedido", "No se encontró el botón para solicitar el almuerzo.")
+            self._notify_telegram(f"⚠️ <b>Error en SiGCA</b>:\n<pre>{html.escape(last_msg)}</pre>")
+            if last_evidence:
+                self._notify_telegram_photo(last_evidence, "Formulario No Identificado")
+            return 2, last_msg, last_evidence
 
-                    for keyword in lunch_keywords:
-                        locator = page.get_by_text(keyword, exact=False)
-                        if locator.count() > 0:
-                            logger.info(f"Se encontró enlace/botón de navegación con palabra clave '{keyword}'. Haciendo clic...")
-                            locator.first.click()
-                            page.wait_for_timeout(2000)
-                            lunch_navigated = True
-                            break
-
-                    if not lunch_navigated:
-                        logger.warning("No se encontró link directo. Buscando en elementos del menú...")
-                        self.capture_evidence(page, "dashboard_search")
-                        nav_links = page.locator("a, button, li")
-                        for i in range(nav_links.count()):
-                            txt = nav_links.nth(i).text_content() or ""
-                            if any(kw.lower() in txt.lower() for kw in lunch_keywords):
-                                logger.info(f"Haciendo clic en el menú '{txt.strip()}'...")
-                                nav_links.nth(i).click()
-                                page.wait_for_timeout(2000)
-                                lunch_navigated = True
-                                break
-
-                    self.capture_evidence(page, "lunch_section")
-
-                    # Verificar si ya fue solicitado
-                    page_text = page.content().lower()
-                    already_ordered_keywords = [
-                        "ya solicitado", "solicitado con éxito", "almuerzo pedido",
-                        "pedido registrado", "ya has solicitado", "solicitud registrada",
-                        "has realizado tu solicitud", "tu pedido ha sido procesado exitosamente",
-                        "¡solicitud registrada!"
-                    ]
-
-                    already_ordered = False
-                    for kw in already_ordered_keywords:
-                        if kw in page_text:
-                            logger.info(f"Se detectó almuerzo ya solicitado previamente (coincidencia con '{kw}').")
-                            already_ordered = True
-                            break
-
-                    if already_ordered:
-                        msg = "El almuerzo ya ha sido solicitado para hoy/mañana. No se requiere acción adicional."
-                        logger.info(msg)
-                        evidence = self.capture_evidence(page, "lunch_already_ordered")
-                        browser.close()
-                        self._notify_toast("Almuerzo Ya Solicitado", "El almuerzo ya fue solicitado previamente.")
-                        self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{html.escape(msg)}")
-                        return 0, msg, evidence
-
-                    # Verificar si el formulario está cerrado
-                    closed_keywords = ["formulario cerrado", "el horario de solicitud de almuerzo ha finalizado"]
-                    is_closed = False
-                    for kw in closed_keywords:
-                        if kw in page_text:
-                            logger.warning(f"Se detectó que el formulario está cerrado (coincidencia con '{kw}').")
-                            is_closed = True
-                            break
-
-                    if is_closed:
-                        msg = "El formulario de solicitud de almuerzo está cerrado y no se pudo realizar el pedido."
-                        logger.error(msg)
-                        evidence = self.capture_evidence(page, "lunch_form_closed")
-                        browser.close()
-                        self._notify_toast("Formulario Cerrado - SiGCA", "El horario de solicitud ha finalizado.")
-                        self._notify_telegram(f"⚠️ <b>Formulario Cerrado en SiGCA</b>:\n{html.escape(msg)}")
-                        if evidence:
-                            self._notify_telegram_photo(evidence, "Formulario Cerrado")
-                        return 2, msg, evidence
-
-                    # --- Selección de Menú ---
-                    prefer_menu = self.config.get("prefer_menu", "saludable").lower()
-                    logger.info(f"Preferencia de menú configurada: {prefer_menu}")
-                    self._notify_telegram(f"📝 <b>Selección de Menú</b>:\nIntentando seleccionar el menú favorito: <code>{html.escape(prefer_menu.capitalize())}</code>...")
-
-                    menu_selected = False
-                    try:
-                        target_label = "Saludable" if prefer_menu == "saludable" else "Estándar"
-                        alternative_label = "Estándar" if prefer_menu == "saludable" else "Saludable"
-
-                        menu_selectors = [
-                            f"text={target_label}",
-                            f"input[value*='{target_label.lower()}']",
-                            f"label:has-text('{target_label}')",
-                            f"span:has-text('{target_label}')"
-                        ]
-
-                        for sel in menu_selectors:
-                            loc = page.locator(sel)
-                            if loc.count() > 0 and loc.first.is_visible():
-                                logger.info(f"Seleccionando menú preferido clicking en: '{sel}'")
-                                loc.first.click()
-                                page.wait_for_timeout(1000)
-                                menu_selected = True
-                                break
-
-                        if not menu_selected:
-                            logger.warning(f"No se pudo seleccionar el menú preferido '{target_label}'. Intentando alternativo '{alternative_label}'...")
-                            alt_selectors = [
-                                f"text={alternative_label}",
-                                f"input[value*='{alternative_label.lower()}']",
-                                f"label:has-text('{alternative_label}')",
-                                f"span:has-text('{alternative_label}')"
-                            ]
-                            for sel in alt_selectors:
-                                loc = page.locator(sel)
-                                if loc.count() > 0 and loc.first.is_visible():
-                                    logger.info(f"Seleccionando menú alternativo clicking en: '{sel}'")
-                                    loc.first.click()
-                                    page.wait_for_timeout(1000)
-                                    menu_selected = True
-                                    break
-                    except Exception as e:
-                        logger.error(f"Error intentando seleccionar la opción de menú: {e}")
-
-                    # --- Rellenar campos condicionales si existen ---
-                    logger.info("Verificando existencia de campos del formulario adicional...")
-
-                    # Cargar configuración del cuestionario
-                    q_config = self.config.get("questionnaire", {})
-                    ubicacion_val = q_config.get("ubicacion", "Sede ExCle")
-                    estrellas_val = q_config.get("estrellas", "3")
-                    bien_cocidos_val = q_config.get("bien_cocidos", "last")
-                    porcion_acorde_val = q_config.get("porcion_acorde", "last")
-                    condimentacion_val = q_config.get("condimentacion", 1)
-                    asistir_tarde_val = q_config.get("asistir_tarde", "Sí")
-                    comentario_val = q_config.get("comentario", "Favor quitar el jugo de melon y las porciones no tienen suficiente proteina, quedando uno con hambre")
-
-                    if page.get_by_text("Ubicación", exact=False).count() > 0:
-                        self.fill_form_field(page, "Ubicación", "select", ubicacion_val)
-
-                    if page.get_by_text("De 1 a 5 estrellas", exact=False).count() > 0:
-                        self.fill_form_field(page, "De 1 a 5 estrellas", "radio", estrellas_val)
-
-                    if page.get_by_text("bien cocidos", exact=False).count() > 0:
-                        self.fill_form_field(page, "bien cocidos", "select", bien_cocidos_val)
-
-                    if page.get_by_text("porción estaba acorde", exact=False).count() > 0:
-                        self.fill_form_field(page, "porción estaba acorde", "select", porcion_acorde_val)
-
-                    if page.get_by_text("condimentación de la comida", exact=False).count() > 0:
-                        try:
-                            cond_val = int(condimentacion_val)
-                        except ValueError:
-                            cond_val = condimentacion_val
-                        self.fill_form_field(page, "condimentación de la comida", "select", cond_val)
-
-                    if page.get_by_text("asistir después de la 01:30", exact=False).count() > 0:
-                        self.fill_form_field(page, "asistir después de la 01:30", "radio", asistir_tarde_val)
-
-                    if page.get_by_text("comentario acerca del plato", exact=False).count() > 0:
-                        self.fill_form_field(page, "comentario acerca del plato", "text", comentario_val)
-
-                    self.capture_evidence(page, "form_filled")
-
-                    # --- Buscar botón de envío ---
-                    submit_buttons = ["Solicitar", "Pedir Almuerzo", "Guardar", "Confirmar", "Enviar", "Aceptar"]
-                    button_found = None
-
-                    for btn_text in submit_buttons:
-                        btn_locator = page.get_by_role("button", name=btn_text, exact=False)
-                        if btn_locator.count() > 0 and btn_locator.first.is_visible():
-                            button_found = btn_locator.first
-                            logger.info(f"Se encontró botón de acción: '{btn_text}'")
-                            break
-                        text_locator = page.get_by_text(btn_text, exact=True)
-                        if text_locator.count() > 0 and text_locator.first.is_visible():
-                            button_found = text_locator.first
-                            logger.info(f"Se encontró elemento clicable con texto: '{btn_text}'")
-                            break
-
-                    if not button_found:
-                        msg = "No se pudo identificar el botón o formulario de pedido de almuerzo en la página."
-                        logger.error(msg)
-                        evidence = self.capture_evidence(page, "lunch_form_not_found")
-                        browser.close()
-                        self._notify_toast("Error de Pedido", "No se encontró el botón para solicitar el almuerzo.")
-                        self._notify_telegram(f"⚠️ <b>Error en SiGCA</b>:\n<pre>{html.escape(msg)}</pre>")
-                        if evidence:
-                            self._notify_telegram_photo(evidence, "Formulario No Identificado")
-                        return 2, msg, evidence
-
-                    if dry_run:
-                        msg = "[DRY RUN] Se encontró el botón de pedido pero NO se hizo clic para no generar un pedido real."
-                        logger.info(msg)
-                        evidence = self.capture_evidence(page, "dry_run_success")
-                        browser.close()
-                        self._notify_toast("Prueba de Pedido (Dry-Run)", "Simulación completada con éxito.")
-                        self._notify_telegram(f"🤖 <b>Prueba Dry-Run Exitosa</b>:\n{html.escape(msg)}")
-                        if evidence:
-                            self._notify_telegram_photo(evidence, "Dry Run Completado")
-                        return 0, msg, evidence
-                    else:
-                        logger.info("Haciendo clic en el botón de solicitud...")
-                        button_found.click()
-
-                        status_text = "El mensaje de éxito apareció en pantalla. Solicitud confirmada."
-                        try:
-                            success_message = page.get_by_text("Solicitud Registrada", exact=False).or_(
-                                page.get_by_text("procesado exitosamente", exact=False)
-                            ).first
-                            success_message.wait_for(state="visible", timeout=10000)
-                            logger.info(status_text)
-                        except PlaywrightTimeoutError:
-                            status_text = "No se detectó el mensaje de éxito después de enviar. Puede que esté lento o haya fallado."
-                            logger.warning(status_text)
-
-                        evidence = self.capture_evidence(page, "post_order_click")
-                        logger.info("Flujo de solicitud completado. Registrando éxito.")
-                        browser.close()
-
-                        self._notify_toast("Almuerzo Solicitado", "¡La solicitud de almuerzo ha sido registrada exitosamente!")
-                        self._notify_telegram(f"✅ <b>Almuerzo Solicitado Exitosamente</b>:\n{html.escape(status_text)}")
-                        if evidence:
-                            self._notify_telegram_photo(evidence, "Confirmación de Pedido")
-                        return 0, f"Solicitud exitosa: {status_text}", evidence
-                except Exception as inner_e:
-                    logger.error(f"Error en flujo de automatización: {inner_e}")
-                    evidence = self.capture_evidence(page, "error_runtime")
-                    self._notify_toast("Error en Automatización", "Ocurrió un error al procesar la solicitud.")
-                    self._notify_telegram(f"❌ <b>Fallo en Automatización de Almuerzo</b>:\n<pre>{html.escape(str(inner_e))}</pre>")
-                    if evidence:
-                        self._notify_telegram_photo(evidence, "Captura del Error")
-                    browser.close()
-                    return 3, str(inner_e), evidence
-
-        except Exception as e:
-            msg = f"Error crítico durante la automatización del almuerzo: {e}"
-            logger.error(msg, exc_info=True)
-            self._notify_toast("Error en Automatización", "Ocurrió un error inesperado al procesar la solicitud.")
-            self._notify_telegram(f"❌ <b>Fallo en Automatización de Almuerzo</b>:\n<pre>{html.escape(msg)}</pre>")
-            return 3, msg, None
-        finally:
-            kill_playwright_orphans()
+        self._notify_toast("Error en Automatización", "Ocurrió un error inesperado al procesar la solicitud tras 3 intentos.")
+        self._notify_telegram(f"❌ <b>Fallo en Automatización de Almuerzo (3 intentos)</b>:\n<pre>{html.escape(last_msg)}</pre>")
+        if last_evidence:
+            self._notify_telegram_photo(last_evidence, "Captura de Error de Solicitud (Último Intento)")
+            
+        return last_exit_code, last_msg, last_evidence
 
     # ------------------------------------------------------------------
     # Cancelación de pedido de almuerzo

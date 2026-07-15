@@ -83,6 +83,12 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   1. **Flag --manual:** Adición de la bandera `--manual` en el parser de comandos CLI de la aplicación para permitir bypassar restricciones de cancelación de forma intencional en ejecuciones manuales.
   2. **Bypass de Cancelación en CLI y Motor:** Configuración en la validación temprana de la CLI en `app_gui.py` y en `run_automation` dentro de `src/bot_engine.py` para ignorar la verificación de `is_cancelled_today` si `--manual` o `is_manual` está activo, posibilitando forzar el pedido.
 
+### 13. Reintentos Incrementales en Solicitudes y Bypass de Cooldown (Versión 2.5.0)
+- **Hitos Completados:**
+  1. **Bypass del Cooldown en Primer Chequeo:** Inclusión de una bandera en el planificador (`scheduler.py`) que ignora el `retry_delay` (cooldown) en la primera comprobación del arranque del bot. Esto asegura que si la PC se reinicia (por ejemplo, tras una actualización de Windows), el bot intente solicitar la comida de forma inmediata sin esperar 5 minutos.
+  2. **Reintentos Incrementales y Timeouts en Solicitud:** Envoltura del proceso de solicitud en `src/bot_engine.py` en un bucle de hasta 3 intentos con timeouts incrementales (1 min, 1.5 min, 2 min) y tiempos de espera de 5s entre intentos. Las notificaciones se consolidan para evitar spam de alertas intermedias.
+  3. **Límites de Tiempo Dinámicos de Subprocesos:** Modificación del controlador de la GUI en `app_gui.py` para aplicar límites dinámicos en los subprocesos de la GUI (manual de solicitud: 300s; cancelación: 180s; simulación: 90s), evitando detenciones prematuras de los flujos resilientes.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
@@ -137,3 +143,7 @@ A continuación, se detallan los fallos históricos encontrados en el desarrollo
 ### 11. Solicitud Manual Cancelada por Estado de Cancelación Diaria Activo
 * **Fallo:** Si el usuario cancelaba el almuerzo del día (por ejemplo, para cambiarlo) y luego pulsaba el botón "Solicitud Manual" para forzar el pedido de nuevo, el bot CLI o el motor Playwright abortaban la ejecución de inmediato porque encontraban que el almuerzo de hoy figuraba como cancelado en `status.json`.
 * **Solución:** Se agregó la bandera `--manual` y se propagó a través de la llamada al subproceso de la GUI. Se actualizaron los controles de flujo en `app_gui.py` y en `src/bot_engine.py` para omitir la validación de cancelación diaria si la ejecución es manual.
+
+### 12. Fallo de Detención Prematura del Subproceso por Límite de Tiempo Rígido en GUI
+* **Fallo:** La GUI detenía forzadamente cualquier subproceso (`manual`, `cancel`) tras exactamente 1 minuto de ejecución de forma fija, lo que impedía que los flujos con reintentos incrementales o conexiones lentas terminaran exitosamente e invalidaba las ejecuciones de fondo correctas.
+* **Solución:** Se implementó una lógica de límites de tiempo dinámicos en `_poll_subprocess` dentro de `app_gui.py` que amplía el margen a 5 minutos para solicitudes manuales y a 3 minutos para cancelaciones, adaptando el monitoreo a los nuevos requerimientos de resiliencia.
