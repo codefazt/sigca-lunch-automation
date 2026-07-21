@@ -15,7 +15,7 @@ import subprocess
 import base64
 from datetime import datetime
 
-from src.config import BASE_DIR, load_status, save_status, load_config
+from src.config import BASE_DIR, load_status, save_status, load_config, get_target_lunch_date
 from src import state
 
 logger = logging.getLogger("SiGCABot")
@@ -133,45 +133,54 @@ def start_scheduler(gui_update_callback=None):
             # -----------------------------------
 
             if status_info.get("is_active", True) and not status_info.get("is_cancelled_today", False):
-                # Comprobar si ya se ejecutó con éxito hoy
-                today_str = datetime.now().strftime("%Y-%m-%d")
-                if status_info.get("last_successful_run") != today_str:
+                # Calcular la fecha del almuerzo objetivo para este ciclo operativo
+                config = load_config()
+                target_date, target_day_name = get_target_lunch_date(config=config)
+                target_date_str = target_date.strftime("%Y-%m-%d")
 
-                    config = load_config()
-                    retry_delay = config.get("retry_delay_sec", 300)
+                # Verificar si el almuerzo de este ciclo ya fue solicitado exitosamente
+                if status_info.get("last_successful_target_date") != target_date_str:
 
-                    # Comprobar cuándo fue la última ejecución (para delay de reintentos)
-                    last_run_str = status_info.get("last_run_timestamp", "")
-                    should_run = True
-
-                    if is_first_check:
-                        logger.info("Primer chequeo tras inicio de la aplicación: Omitiendo cooldown de reintento.")
+                    # Verificar días deshabilitados (teletrabajo/libres) por el día OBJETIVO
+                    disabled_days = config.get("disabled_days", [])
+                    if target_day_name in disabled_days:
+                        if is_first_check:
+                            logger.info(f"El almuerzo objetivo es para el {target_day_name} ({target_date_str}), marcado como día libre/remoto. Omitiendo solicitud.")
                     else:
-                        if last_run_str and last_run_str != "Nunca":
-                            try:
-                                last_run_time = datetime.strptime(last_run_str, "%Y-%m-%d %H:%M:%S")
-                                elapsed = (datetime.now() - last_run_time).total_seconds()
-                                if elapsed < retry_delay:
-                                    should_run = False
-                            except Exception:
-                                pass
+                        retry_delay = config.get("retry_delay_sec", 300)
 
-                    if should_run:
-                        # Verificar ventana horaria directamente sin crear LunchBot
-                        from datetime import time as dt_time
-                        current_t = datetime.now().time()
-                        start_t = dt_time(config.get("start_hour", 15), config.get("start_minute", 30))
-                        end_t = dt_time(config.get("end_hour", 10), config.get("end_minute", 0))
+                        # Comprobar cuándo fue la última ejecución (para delay de reintentos)
+                        last_run_str = status_info.get("last_run_timestamp", "")
+                        should_run = True
 
-                        if start_t <= end_t:
-                            time_valid = start_t <= current_t < end_t
+                        if is_first_check:
+                            logger.info("Primer chequeo tras inicio de la aplicación: Omitiendo cooldown de reintento.")
                         else:
-                            # Ventana que cruza la medianoche (ej. 3:30 PM a 9:59 AM)
-                            time_valid = current_t >= start_t or current_t < end_t
+                            if last_run_str and last_run_str != "Nunca":
+                                try:
+                                    last_run_time = datetime.strptime(last_run_str, "%Y-%m-%d %H:%M:%S")
+                                    elapsed = (datetime.now() - last_run_time).total_seconds()
+                                    if elapsed < retry_delay:
+                                        should_run = False
+                                except Exception:
+                                    pass
 
-                        if time_valid:
-                            logger.info("Se detectó ventana horaria activa y almuerzo pendiente. Iniciando Job de Almuerzo...")
-                            run_lunch_automation_job(dry_run=False, gui_update_callback=gui_update_callback)
+                        if should_run:
+                            # Verificar ventana horaria directamente sin crear LunchBot
+                            from datetime import time as dt_time
+                            current_t = datetime.now().time()
+                            start_t = dt_time(config.get("start_hour", 15), config.get("start_minute", 30))
+                            end_t = dt_time(config.get("end_hour", 10), config.get("end_minute", 0))
+
+                            if start_t <= end_t:
+                                time_valid = start_t <= current_t < end_t
+                            else:
+                                # Ventana que cruza la medianoche (ej. 3:30 PM a 9:59 AM)
+                                time_valid = current_t >= start_t or current_t < end_t
+
+                            if time_valid:
+                                logger.info(f"Se detectó ventana horaria activa y almuerzo pendiente para el {target_day_name} ({target_date_str}). Iniciando Job de Almuerzo...")
+                                run_lunch_automation_job(dry_run=False, gui_update_callback=gui_update_callback)
         except Exception as e:
             logger.error(f"Error en ciclo del planificador: {e}")
 

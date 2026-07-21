@@ -89,6 +89,13 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   2. **Reintentos Incrementales y Timeouts en Solicitud:** Envoltura del proceso de solicitud en `src/bot_engine.py` en un bucle de hasta 3 intentos con timeouts incrementales (1 min, 1.5 min, 2 min) y tiempos de espera de 5s entre intentos. Las notificaciones se consolidan para evitar spam de alertas intermedias.
   3. **Límites de Tiempo Dinámicos de Subprocesos:** Modificación del controlador de la GUI en `app_gui.py` para aplicar límites dinámicos en los subprocesos de la GUI (manual de solicitud: 300s; cancelación: 180s; simulación: 90s), evitando detenciones prematuras de los flujos resilientes.
 
+### 14. Ciclo Operativo de Almuerzo (`target_lunch_date`) y Diagnóstico Resiliente (Versión 2.5.1)
+- **Hitos Completados:**
+  1. **Concepto `target_lunch_date`:** Refactorización en `src/config.py` con la función `get_target_lunch_date()` para determinar la fecha exacta del almuerzo objetivo (`YYYY-MM-DD`) según el rango operativo (15:30 a 10:00 AM).
+  2. **Prevención de Disparos Nocturnos Duplicados:** Actualización de `status.json` (`last_successful_target_date`), `scheduler.py` y `app_gui.py` para verificar duplicados basándose en la fecha del plato objetivo en lugar de la fecha astronómica del reloj.
+  3. **Mapeo Inteligente de Días Excluidos (Teletrabajo):** Evaluación de `disabled_days` respecto al día objetivo del almuerzo consumible, permitiendo que marcar "Jueves" cancele automáticamente el pedido desde la tarde del Miércoles.
+  4. **Optimización de Diagnóstico de Inicio:** Ampliación del timeout de `chromium.launch` en `--check-deps` (de 4s a 15s) y del timeout del subproceso en `app_gui.py` (de 8s a 25s) para erradicar falsas alertas de "Verificación Colgada" en arranques de Windows con carga inicial.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
@@ -147,3 +154,8 @@ A continuación, se detallan los fallos históricos encontrados en el desarrollo
 ### 12. Fallo de Detención Prematura del Subproceso por Límite de Tiempo Rígido en GUI
 * **Fallo:** La GUI detenía forzadamente cualquier subproceso (`manual`, `cancel`) tras exactamente 1 minuto de ejecución de forma fija, lo que impedía que los flujos con reintentos incrementales o conexiones lentas terminaran exitosamente e invalidaba las ejecuciones de fondo correctas.
 * **Solución:** Se implementó una lógica de límites de tiempo dinámicos en `_poll_subprocess` dentro de `app_gui.py` que amplía el margen a 5 minutos para solicitudes manuales y a 3 minutos para cancelaciones, adaptando el monitoreo a los nuevos requerimientos de resiliencia.
+
+### 13. Falsa Alerta de "Verificación Colgada" por Timeouts Rígidos de Inicio (4s/8s)
+* **Fallo:** Al abrir la GUI, el subproceso de comprobación de dependencias (`--check-deps`) fallaba frecuentemente en máquinas con carga inicial debido a un timeout muy ajustado de 4000ms en `chromium.launch` y 8 segundos en el monitoreo del subproceso. Esto hacía creer a la aplicación que Chromium o las DLLs de C++ no estaban instaladas, desplegando repetidamente la ventana modal de reparación a pesar de que el entorno estaba 100% listo.
+* **Solución:** Se amplió el tiempo límite interno de `launch` en `--check-deps` a 15,000ms (15s) y el tiempo máximo del subproceso a 25 segundos en `app_gui.py`, permitiendo que el arranque normal de Python/Playwright responda `OK_PLAYWRIGHT` (típicamente en 2-4 segundos) de forma limpia sin generar falsos positivos.
+

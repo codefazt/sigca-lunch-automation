@@ -7,17 +7,16 @@ de configuración (.env, config.json, status.json) y auto-inicio con Windows.
 import os
 import sys
 import json
-import ctypes
-import threading
-import winreg
 import logging
-import base64
+import threading
 from datetime import datetime
+import ctypes
+import base64
 
 logger = logging.getLogger("SiGCABot")
 
-# Versión de la Aplicación
-APP_VERSION = "2.5.0"
+# Versión global de la aplicación
+APP_VERSION = "2.5.1"
 
 # ---------------------------------------------------------------------------
 # Ofuscación / Encriptación simple de campos sensibles
@@ -153,6 +152,86 @@ ACCENT_BLUE = "#005a82"    # Azul mágico oscuro (Info)
 status_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
+# Cálculo del Ciclo Operativo de Almuerzo (target_lunch_date)
+# ---------------------------------------------------------------------------
+
+# Mapeo de weekday() de Python a nombres de días en español
+DIAS_SEMANA_MAP = {
+    0: "Lunes",
+    1: "Martes",
+    2: "Miércoles",
+    3: "Jueves",
+    4: "Viernes",
+    5: "Sábado",
+    6: "Domingo"
+}
+
+def get_target_lunch_date(now=None, config=None):
+    """
+    Calcula la fecha del almuerzo objetivo basándose en el ciclo operativo real.
+
+    El formulario de SiGCA abre a la hora de inicio (ej. 15:30) para solicitar
+    el almuerzo del DÍA SIGUIENTE. Permanece abierto hasta la hora de fin
+    (ej. 10:00 AM) de ese día siguiente.
+
+    - Si hora_actual >= start_hour:start_minute → target = mañana
+    - Si hora_actual < end_hour:end_minute     → target = hoy (mismo ciclo)
+    - Si hora_actual está en el "hueco" entre end y start → target = mañana
+      (el próximo ciclo que abrirá a las start_hour)
+
+    Args:
+        now: datetime opcional. Si es None, usa datetime.now().
+        config: dict opcional con start_hour, start_minute, end_hour, end_minute.
+
+    Returns:
+        Tupla (target_date: date, day_name_es: str)
+        Ejemplo: (date(2026, 7, 23), "Miércoles")
+    """
+    from datetime import timedelta, time as dt_time
+    if now is None:
+        now = datetime.now()
+    if config is None:
+        config = load_config()
+
+    start_t = dt_time(
+        config.get("start_hour", 15),
+        config.get("start_minute", 30)
+    )
+    end_t = dt_time(
+        config.get("end_hour", 10),
+        config.get("end_minute", 0)
+    )
+    current_t = now.time()
+
+    if start_t <= end_t:
+        # Ventana en el mismo día (ej. 07:30 a 10:00)
+        # Si estamos dentro o después del inicio → almuerzo es para mañana
+        if current_t >= start_t:
+            target = (now + timedelta(days=1)).date()
+        else:
+            # Antes del inicio: si estamos antes del cierre, sigue el mismo ciclo (hoy)
+            # Si estamos después del cierre, el próximo ciclo abre a start_t → target mañana
+            if current_t < end_t:
+                target = now.date()
+            else:
+                target = (now + timedelta(days=1)).date()
+    else:
+        # Ventana que cruza la medianoche (ej. 15:30 a 10:00)
+        if current_t >= start_t:
+            # Después de las 15:30 → almuerzo es para mañana
+            target = (now + timedelta(days=1)).date()
+        elif current_t < end_t:
+            # Antes de las 10:00 AM (madrugada/mañana) → almuerzo sigue siendo para hoy
+            target = now.date()
+        else:
+            # En el "hueco" entre 10:00 AM y 15:30 (fuera de ventana)
+            # El próximo ciclo abrirá a las 15:30 → target será mañana
+            target = (now + timedelta(days=1)).date()
+
+    day_name_es = DIAS_SEMANA_MAP.get(target.weekday(), "")
+    return target, day_name_es
+
+# ---------------------------------------------------------------------------
 # Funciones de Persistencia — status.json
 # ---------------------------------------------------------------------------
 
@@ -180,6 +259,11 @@ def load_status():
                     if "is_cancelled_today" not in data:
                         data["is_cancelled_today"] = False
                         changed = True
+
+                    # Inicializar last_successful_target_date para compatibilidad
+                    if "last_successful_target_date" not in data:
+                        data["last_successful_target_date"] = ""
+                        changed = True
                         
                     if changed:
                         try:
@@ -193,6 +277,7 @@ def load_status():
         return {
             "is_active": True,
             "last_successful_run": "",
+            "last_successful_target_date": "",
             "last_run_timestamp": "Nunca",
             "last_run_status": "N/A",
             "startup_on_boot": False,

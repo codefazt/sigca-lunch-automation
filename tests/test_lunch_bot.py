@@ -121,3 +121,127 @@ def test_load_credentials_missing_passwords(tmp_path):
          patch("src.bot_engine.CONFIG_PATH", str(tmp_path / "config.json")):
         with pytest.raises(ValueError, match="Falta la variable de entorno SIGCA_PASSWORDS"):
             LunchBot()
+
+
+# ---------------------------------------------------------------------------
+# Tests para get_target_lunch_date (Ciclo Operativo de Almuerzo)
+# ---------------------------------------------------------------------------
+
+from datetime import datetime, date
+from src.config import get_target_lunch_date
+
+
+# Configuración por defecto: ventana que cruza medianoche (15:30 a 10:00)
+CROSS_MIDNIGHT_CONFIG = {
+    "start_hour": 15, "start_minute": 30,
+    "end_hour": 10, "end_minute": 0
+}
+
+# Configuración de ventana en el mismo día (07:30 a 10:00)
+SAME_DAY_CONFIG = {
+    "start_hour": 7, "start_minute": 30,
+    "end_hour": 10, "end_minute": 0
+}
+
+
+def test_target_lunch_date_afternoon_tuesday():
+    """Martes 3:30 PM → almuerzo es para el Miércoles."""
+    now = datetime(2026, 7, 21, 15, 30)  # Martes 3:30 PM
+    target, day_name = get_target_lunch_date(now=now, config=CROSS_MIDNIGHT_CONFIG)
+    assert target == date(2026, 7, 22)
+    assert day_name == "Miércoles"
+
+
+def test_target_lunch_date_late_evening_tuesday():
+    """Martes 11:59 PM → almuerzo sigue siendo para el Miércoles."""
+    now = datetime(2026, 7, 21, 23, 59)  # Martes 11:59 PM
+    target, day_name = get_target_lunch_date(now=now, config=CROSS_MIDNIGHT_CONFIG)
+    assert target == date(2026, 7, 22)
+    assert day_name == "Miércoles"
+
+
+def test_target_lunch_date_midnight_wednesday():
+    """Miércoles 00:01 AM → almuerzo sigue siendo para el Miércoles (mismo ciclo)."""
+    now = datetime(2026, 7, 22, 0, 1)  # Miércoles 00:01 AM
+    target, day_name = get_target_lunch_date(now=now, config=CROSS_MIDNIGHT_CONFIG)
+    assert target == date(2026, 7, 22)
+    assert day_name == "Miércoles"
+
+
+def test_target_lunch_date_early_morning_wednesday():
+    """Miércoles 9:59 AM → almuerzo sigue siendo para el Miércoles (mismo ciclo)."""
+    now = datetime(2026, 7, 22, 9, 59)  # Miércoles 9:59 AM
+    target, day_name = get_target_lunch_date(now=now, config=CROSS_MIDNIGHT_CONFIG)
+    assert target == date(2026, 7, 22)
+    assert day_name == "Miércoles"
+
+
+def test_target_lunch_date_gap_between_end_and_start():
+    """Miércoles 12:00 PM (fuera de ventana) → target es Jueves (próximo ciclo)."""
+    now = datetime(2026, 7, 22, 12, 0)  # Miércoles 12:00 PM
+    target, day_name = get_target_lunch_date(now=now, config=CROSS_MIDNIGHT_CONFIG)
+    assert target == date(2026, 7, 23)
+    assert day_name == "Jueves"
+
+
+def test_target_lunch_date_exactly_at_end():
+    """Miércoles 10:00 AM (fin exacto de ventana) → target es Jueves (próximo ciclo)."""
+    now = datetime(2026, 7, 22, 10, 0)  # Miércoles 10:00 AM
+    target, day_name = get_target_lunch_date(now=now, config=CROSS_MIDNIGHT_CONFIG)
+    assert target == date(2026, 7, 23)
+    assert day_name == "Jueves"
+
+
+def test_target_lunch_date_wednesday_afternoon():
+    """Miércoles 3:30 PM → almuerzo para el Jueves (nuevo ciclo)."""
+    now = datetime(2026, 7, 22, 15, 30)  # Miércoles 3:30 PM
+    target, day_name = get_target_lunch_date(now=now, config=CROSS_MIDNIGHT_CONFIG)
+    assert target == date(2026, 7, 23)
+    assert day_name == "Jueves"
+
+
+def test_target_lunch_date_same_day_window_before_start():
+    """Con ventana 07:30-10:00 (mismo día), a las 05:00 AM → target es hoy."""
+    now = datetime(2026, 7, 22, 5, 0)
+    target, day_name = get_target_lunch_date(now=now, config=SAME_DAY_CONFIG)
+    # Antes de la ventana y antes del cierre? No, 05:00 < 07:30 y 05:00 < 10:00
+    # Dentro de la rama start <= end: current_t < start_t, y current_t < end_t → target = hoy
+    assert target == date(2026, 7, 22)
+
+
+def test_target_lunch_date_same_day_window_during():
+    """Con ventana 07:30-10:00, a las 08:00 AM → target es mañana."""
+    now = datetime(2026, 7, 22, 8, 0)
+    target, day_name = get_target_lunch_date(now=now, config=SAME_DAY_CONFIG)
+    # current_t >= start_t → target = mañana
+    assert target == date(2026, 7, 23)
+
+
+def test_target_lunch_date_same_day_window_after_close():
+    """Con ventana 07:30-10:00, a las 14:00 → target es mañana (fuera de ventana)."""
+    now = datetime(2026, 7, 22, 14, 0)
+    target, day_name = get_target_lunch_date(now=now, config=SAME_DAY_CONFIG)
+    # current_t >= start_t → target = mañana
+    assert target == date(2026, 7, 23)
+
+
+def test_disabled_day_maps_to_target_lunch_date():
+    """Marcar 'Jueves' como excluido bloquea pedidos desde la tarde del Miércoles."""
+    disabled_days = ["Jueves"]
+    # Miércoles 4:00 PM → target es Jueves
+    now = datetime(2026, 7, 22, 16, 0)
+    target, day_name = get_target_lunch_date(now=now, config=CROSS_MIDNIGHT_CONFIG)
+    assert day_name == "Jueves"
+    assert day_name in disabled_days
+
+    # Jueves 8:00 AM → target sigue siendo Jueves (mismo ciclo nocturno)
+    now2 = datetime(2026, 7, 23, 8, 0)
+    target2, day_name2 = get_target_lunch_date(now=now2, config=CROSS_MIDNIGHT_CONFIG)
+    assert day_name2 == "Jueves"
+    assert day_name2 in disabled_days
+
+    # Jueves 4:00 PM → target es Viernes (nuevo ciclo, no bloqueado)
+    now3 = datetime(2026, 7, 23, 16, 0)
+    target3, day_name3 = get_target_lunch_date(now=now3, config=CROSS_MIDNIGHT_CONFIG)
+    assert day_name3 == "Viernes"
+    assert day_name3 not in disabled_days

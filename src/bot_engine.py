@@ -21,7 +21,7 @@ from datetime import datetime, time
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
-from src.config import BASE_DIR, ENV_PATH, CONFIG_PATH, load_status
+from src.config import BASE_DIR, ENV_PATH, CONFIG_PATH, load_status, load_config, get_target_lunch_date, DIAS_SEMANA_MAP
 from src import notifications
 
 logger = logging.getLogger("SiGCABot")
@@ -425,21 +425,12 @@ class LunchBot:
                     logger.warning(msg)
                     return 0, msg, None
 
-                # Validar días deshabilitados (libres/remotos)
+                # Validar días deshabilitados (libres/remotos) usando la fecha OBJETIVO del almuerzo
                 disabled_days = self.config.get("disabled_days", [])
                 if disabled_days:
-                    dias_semana = {
-                        0: "Lunes",
-                        1: "Martes",
-                        2: "Miércoles",
-                        3: "Jueves",
-                        4: "Viernes",
-                        5: "Sábado",
-                        6: "Domingo"
-                    }
-                    today_name = dias_semana.get(datetime.now().weekday())
-                    if today_name in disabled_days:
-                        msg = f"Hoy es {today_name}, marcado como día libre/remoto en la configuración. Ejecución cancelada automáticamente."
+                    target_date, target_day_name = get_target_lunch_date(config=self.config)
+                    if target_day_name in disabled_days:
+                        msg = f"El almuerzo objetivo es para el {target_day_name} ({target_date.strftime('%Y-%m-%d')}), marcado como día libre/remoto en la configuración. Ejecución cancelada automáticamente."
                         logger.info(msg)
                         return 0, msg, None
 

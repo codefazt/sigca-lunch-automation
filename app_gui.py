@@ -62,7 +62,7 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
             )
             from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True, timeout=4000)
+                browser = p.chromium.launch(headless=True, timeout=15000)
                 browser.close()
             print("OK_PLAYWRIGHT")
             sys.exit(0)
@@ -85,11 +85,14 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
                 logger.info("El almuerzo de hoy fue cancelado por el usuario. Deteniendo ejecución en segundo plano.")
                 sys.exit(0)
 
-            # 3. Si ya se ejecutó exitosamente hoy y no es forzado, no volver a intentar.
+            # 3. Si ya se ejecutó exitosamente para este ciclo de almuerzo y no es forzado, no volver a intentar.
             if not _args.force_time:
-                today_str = datetime.now().strftime("%Y-%m-%d")
-                if status_info.get("last_successful_run") == today_str:
-                    logger.info("El almuerzo ya fue solicitado con éxito hoy. Deteniendo ejecución para evitar duplicados.")
+                from src.config import get_target_lunch_date, load_config
+                _cli_config = load_config()
+                _target_date, _target_day_name = get_target_lunch_date(config=_cli_config)
+                _target_date_str = _target_date.strftime("%Y-%m-%d")
+                if status_info.get("last_successful_target_date") == _target_date_str:
+                    logger.info(f"El almuerzo para el {_target_day_name} ({_target_date_str}) ya fue solicitado con éxito. Deteniendo ejecución para evitar duplicados.")
                     sys.exit(0)
 
             # 4. Evitar colisión si la GUI ya está abierta en segundo plano.
@@ -123,6 +126,11 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
                     status_info["last_run_status"] = "success"
                     if not _args.dry_run:
                         status_info["last_successful_run"] = datetime.now().strftime("%Y-%m-%d")
+                        # Guardar la fecha del almuerzo objetivo para el control del ciclo operativo
+                        from src.config import get_target_lunch_date, load_config
+                        _cli_cfg = load_config()
+                        _tgt_date, _ = get_target_lunch_date(config=_cli_cfg)
+                        status_info["last_successful_target_date"] = _tgt_date.strftime("%Y-%m-%d")
                 else:
                     status_info["last_run_status"] = f"error (código {exit_code})"
                     if exit_code == 1:
@@ -159,6 +167,7 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
                     status_info["last_run_status"] = "cancelado"
                     if "last_successful_run" in status_info:
                         status_info["last_successful_run"] = ""
+                    status_info["last_successful_target_date"] = ""
                     save_status(status_info)
                 except Exception as se:
                     logger.error(f"No se pudo guardar el estado de cancelación en status.json: {se}")
@@ -173,7 +182,7 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
 # Modo GUI (por defecto): Interfaz gráfica de escritorio
 # ---------------------------------------------------------------------------
 
-from src.config import BASE_DIR, load_env_dict, save_env_values, load_config, save_config, get_asset_path, set_startup, BG_MAIN, BG_CARD, BG_INPUT, FG_TEXT, FG_MUTED, ACCENT, ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW, ACCENT_BLUE, load_status, save_status, APP_VERSION
+from src.config import BASE_DIR, load_env_dict, save_env_values, load_config, save_config, get_asset_path, set_startup, BG_MAIN, BG_CARD, BG_INPUT, FG_TEXT, FG_MUTED, ACCENT, ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW, ACCENT_BLUE, load_status, save_status, APP_VERSION, get_target_lunch_date
 from src.logger import logger, gui_log_handler
 from src.bot_engine import LunchBot, kill_playwright_orphans
 from src.health_server import start_http_server
@@ -1761,14 +1770,16 @@ class AppGUI:
             start_hour = config.get("start_hour", 15)
             start_minute = config.get("start_minute", 30)
 
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            already_ordered_today = status_info.get("last_successful_run") == today_str
+            # Usar ciclo operativo de almuerzo para determinar estado
+            target_date, target_day_name = get_target_lunch_date(config=config)
+            target_date_str = target_date.strftime("%Y-%m-%d")
+            already_ordered_cycle = status_info.get("last_successful_target_date") == target_date_str
             time_valid = bot.is_time_valid()
 
-            if already_ordered_today:
-                msg = f"El planificador ha sido activado. El almuerzo de hoy ya se pidió con éxito. Próxima comprobación: mañana a las {start_hour:02d}:{start_minute:02d}."
+            if already_ordered_cycle:
+                msg = f"El planificador ha sido activado. El almuerzo para el {target_day_name} ({target_date_str}) ya se pidió con éxito. Próxima comprobación: siguiente ciclo a las {start_hour:02d}:{start_minute:02d}."
             elif not time_valid:
-                msg = f"El planificador ha sido activado. Fuera del rango horario. Próxima comprobación automática: hoy a las {start_hour:02d}:{start_minute:02d}."
+                msg = f"El planificador ha sido activado. Fuera del rango horario. Próxima comprobación automática: a las {start_hour:02d}:{start_minute:02d}."
             else:
                 msg = "El planificador ha sido activado. Iniciando de inmediato el intento de solicitud de almuerzo en segundo plano..."
                 logger.info(msg)
@@ -1972,15 +1983,16 @@ class AppGUI:
         logger.info("Estado de cancelaciones refrescado en la GUI")
 
     def reset_lunch_success_action(self):
-        """Limpia el registro de éxito del almuerzo de hoy para permitir la re-ejecución automática."""
-        if show_custom_confirm("Resetear Registro", "¿Deseas borrar el registro del almuerzo exitoso de hoy?\n\nEsto permitirá que el bot vuelva a intentar la solicitud automática si está dentro de la ventana horaria."):
+        """Limpia el registro de éxito del ciclo de almuerzo actual para permitir la re-ejecución automática."""
+        if show_custom_confirm("Resetear Registro", "¿Deseas borrar el registro del almuerzo exitoso del ciclo actual?\n\nEsto permitirá que el bot vuelva a intentar la solicitud automática si está dentro de la ventana horaria."):
             status_info = load_status()
             status_info["last_successful_run"] = ""
+            status_info["last_successful_target_date"] = ""
             status_info["last_run_status"] = "reseteado"
             save_status(status_info)
             update_gui_status_badge()
-            logger.info("Se ha reseteado manualmente el registro de éxito del almuerzo de hoy.")
-            show_custom_success("Estado Reseteado", "El registro del almuerzo de hoy ha sido limpiado con éxito.\nEl planificador automático podrá volver a procesar solicitudes hoy.")
+            logger.info("Se ha reseteado manualmente el registro de éxito del ciclo de almuerzo actual.")
+            show_custom_success("Estado Reseteado", "El registro del almuerzo del ciclo actual ha sido limpiado con éxito.\nEl planificador automático podrá volver a procesar solicitudes.")
 
     # --- Acciones del Programador de Tareas de Windows ---
 
@@ -2267,9 +2279,9 @@ class AppGUI:
                 self.root.after(0, lambda: self._handle_dep_check_failure(all_output))
             return
 
-        # Verificar si excedió los 8 segundos (antivirus colgado o DLLs rotas)
+        # Verificar si excedió los 25 segundos (antivirus colgado o DLLs rotas)
         elapsed = time.time() - start_time
-        if elapsed > 8:
+        if elapsed > 25:
             try:
                 proc.kill()
             except Exception:
@@ -2279,8 +2291,8 @@ class AppGUI:
             except Exception:
                 pass
             kill_playwright_orphans()
-            logger.critical("Timeout (8s) en la verificación de dependencias al inicio.")
-            self.root.after(0, lambda: self._handle_dep_check_failure("TIMEOUT_8S"))
+            logger.critical("Timeout (25s) en la verificación de dependencias al inicio.")
+            self.root.after(0, lambda: self._handle_dep_check_failure("TIMEOUT_25S"))
             return
 
         # Seguir monitoreando
@@ -2303,7 +2315,7 @@ class AppGUI:
         ])
 
         # Detectar si es un problema de timeout (DLLs o antivirus)
-        is_timeout = "timeout_8s" in error_lower
+        is_timeout = "timeout" in error_lower
 
         # Detectar si es un error de DLLs del sistema
         is_dll_error = any(kw in error_lower for kw in [
@@ -2319,7 +2331,7 @@ class AppGUI:
             # Timeout: probablemente DLLs faltantes o antivirus
             self._show_environment_repair_dialog(
                 "⏱️ Verificación Colgada",
-                "La prueba de arranque del navegador superó el tiempo límite (8 segundos) y fue abortada.\n\n"
+                "La prueba de arranque del navegador superó el tiempo límite (25 segundos) y fue abortada.\n\n"
                 "Este síntoma ocurre cuando:\n"
                 "• Faltan las librerías 'Microsoft Visual C++ Redistributable' en este Windows.\n"
                 "• Un Antivirus o Windows Defender bloqueó silenciosamente el binario del navegador.\n\n"
