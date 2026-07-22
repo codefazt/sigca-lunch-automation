@@ -128,11 +128,17 @@ class LunchBot:
 
     def _notify_email(self, subject, body_html, image_path=None):
         logger.info(f"Despachando correo electrónico ('{subject}')...")
-        threading.Thread(
-            target=notifications.send_email_notification,
-            args=(self.username, subject, body_html, image_path, self.smtp_email, self.smtp_password),
-            daemon=True
-        ).start()
+        try:
+            notifications.send_email_notification(
+                to_email=self.username,
+                subject=subject,
+                body_html=body_html,
+                image_path=image_path,
+                sender_email=self.smtp_email,
+                sender_password=self.smtp_password
+            )
+        except Exception as e:
+            logger.error(f"Error al enviar correo electrónico: {e}")
 
     def _send_email_success(self, status_text, evidence_path=None, is_dry_run=False, is_cancellation=False):
         target_dt, day_name = get_target_lunch_date()

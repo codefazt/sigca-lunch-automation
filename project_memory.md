@@ -135,6 +135,12 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   2. **Integración en Ramas de Salida Prematura:** Adición de llamadas a `_send_email_success` / `_send_email_error` en las ramas de `login_failed`, `already_ordered` ("Almuerzo ya solicitado") y `is_closed` ("Formulario cerrado"), asegurando que todas las ejecuciones (Manuales, Dry-Run y Programadas) manden su correo correspondiente.
   3. **Registro Transparente en Consola (Logs):** Adición de trazas explícitas de `logger.info` al despachar el correo y adjuntar las capturas de pantalla de evidencia para visualización en tiempo real desde la GUI.
 
+### 22. Despacho Sincrónico de Correo y Diagnóstico del Proceso CLI/Subproceso (Versión 2.6.3 Update)
+- **Hitos Completados:**
+  1. **Diagnóstico de Hilos Daemon Interrumpidos:** Se identificó que al ejecutar solicitudes manuales o simulaciones desde la GUI o la CLI (`--run-job`), el subproceso invocaba `sys.exit(0)` inmediatamente después de finalizar `run_automation()`. Dado que `_notify_email` se ejecutaba en un hilo `daemon=True`, el proceso finalizaba antes de que el socket SSL con `smtp.gmail.com:465` enviara la información.
+  2. **Despacho Sincrónico Garantizado:** Se convirtió `_notify_email` a ejecución sincrónica dentro del flujo final del bot, garantizando que el bot espere la confirmación `250 OK` de Gmail antes de finalizar el proceso.
+  3. **Verificación Empírica:** Verificado exitosamente con traza de log completa: `✅ Correo electrónico de notificación enviado con éxito.` recibido en la bandeja corporativa.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
