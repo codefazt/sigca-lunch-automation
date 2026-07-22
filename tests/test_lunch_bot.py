@@ -245,3 +245,27 @@ def test_disabled_day_maps_to_target_lunch_date():
     target3, day_name3 = get_target_lunch_date(now=now3, config=CROSS_MIDNIGHT_CONFIG)
     assert day_name3 == "Viernes"
     assert day_name3 not in disabled_days
+
+
+# ---------------------------------------------------------------------------
+# Tests para Auto-Healing de Inicio con Windows (set_startup & repair)
+# ---------------------------------------------------------------------------
+
+from src.config import get_expected_startup_command, check_and_repair_startup
+
+
+def test_get_expected_startup_command():
+    """Verifica que el comando de auto-inicio retorne una cadena no vacía entre comillas."""
+    cmd = get_expected_startup_command()
+    assert isinstance(cmd, str)
+    assert cmd.startswith('"') and cmd.endswith('"') or '"' in cmd
+
+
+def test_check_and_repair_startup_runs_without_crash(tmp_path):
+    """Verifica que check_and_repair_startup se ejecute sin excepciones."""
+    status_file = tmp_path / "status.json"
+    status_file.write_text('{"startup_on_boot": false}')
+    with patch("src.config.STATUS_PATH", str(status_file)):
+        res = check_and_repair_startup()
+        assert isinstance(res, bool)
+

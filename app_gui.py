@@ -182,7 +182,7 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
 # Modo GUI (por defecto): Interfaz gráfica de escritorio
 # ---------------------------------------------------------------------------
 
-from src.config import BASE_DIR, load_env_dict, save_env_values, load_config, save_config, get_asset_path, set_startup, BG_MAIN, BG_CARD, BG_INPUT, FG_TEXT, FG_MUTED, ACCENT, ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW, ACCENT_BLUE, load_status, save_status, APP_VERSION, get_target_lunch_date
+from src.config import BASE_DIR, load_env_dict, save_env_values, load_config, save_config, get_asset_path, set_startup, check_and_repair_startup, BG_MAIN, BG_CARD, BG_INPUT, FG_TEXT, FG_MUTED, ACCENT, ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW, ACCENT_BLUE, load_status, save_status, APP_VERSION, get_target_lunch_date
 from src.logger import logger, gui_log_handler
 from src.bot_engine import LunchBot, kill_playwright_orphans
 from src.health_server import start_http_server
@@ -1044,6 +1044,16 @@ class AppGUI:
 
         logger.info("Aplicación iniciada. Bienvenido al panel de SiGCA Bot.")
 
+        # Verificar y auto-reparar (Auto-Healing) el inicio automático con Windows en el arranque en segundo plano
+        def run_startup_healing():
+            try:
+                import threading
+                threading.Thread(target=check_and_repair_startup, daemon=True).start()
+            except Exception as e:
+                logger.error(f"Error al iniciar hilo de auto-reparación de inicio: {e}")
+
+        self.root.after(1000, run_startup_healing)
+
         # Programar la verificación de dependencias de Playwright al inicio (dar 2s para renderizado de Tkinter)
         self.root.after(2000, self.verify_dependencies_startup)
 
@@ -1888,17 +1898,23 @@ class AppGUI:
         
         save_config(config)
 
-        # Sincronizar automáticamente la tarea programada de Windows si ya está registrada
+        # Recrear limpiamente la tarea programada de Windows si ya estaba registrada para eliminar residuos viejos
         try:
-            from src.scheduler import check_windows_task_exists, register_windows_task
+            from src.scheduler import check_windows_task_exists, unregister_windows_task, register_windows_task
             if check_windows_task_exists():
-                logger.info("Sincronizando el Programador de Tareas de Windows con el nuevo horario...")
+                logger.info("Recreando limpiamente la Tarea Programada de Windows con la ruta y horario actualizados...")
+                unregister_windows_task()
                 register_windows_task(config["start_hour"], config["start_minute"])
         except Exception as e:
-            logger.error(f"No se pudo sincronizar la tarea programada de Windows: {e}")
+            logger.error(f"No se pudo resincronizar la tarea programada de Windows: {e}")
 
         startup_enabled = self.startup_var.get()
-        set_startup(startup_enabled)
+        # Limpieza previa y registro limpio para evitar claves de registro o accesos directos obsoletos
+        if startup_enabled:
+            set_startup(False)
+            set_startup(True)
+        else:
+            set_startup(False)
 
         status_info = load_status()
         status_info["startup_on_boot"] = startup_enabled
@@ -2233,70 +2249,28 @@ class AppGUI:
     # ---------------------------------------------------------------------------
 
     def verify_dependencies_startup(self):
-        """Lanza la verificación de dependencias en un subproceso al iniciar."""
+        """Verifica de forma asíncrona en un hilo que Playwright y Chromium funcionen."""
         logger.info("Iniciando verificación automática de dependencias...")
-        
-        import sys
-        entry_script = sys.argv[0]
-        if getattr(sys, 'frozen', False):
-            cmd = [sys.executable, "--check-deps"]
-        else:
-            abs_script = os.path.abspath(entry_script)
-            cmd = [sys.executable, abs_script, "--check-deps"]
 
-        try:
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,  # Combinar stderr en stdout para capturar todo
-                text=True,
-                encoding="utf-8",
-                errors="backslashreplace",
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            )
-            # Monitorear el subproceso de chequeo en Tkinter
-            self.root.after(500, lambda: self._poll_startup_check(proc, time.time()))
-        except Exception as e:
-            logger.error(f"Error al iniciar el subproceso de diagnóstico: {e}")
-
-    def _poll_startup_check(self, proc, start_time):
-        """Monitorea el subproceso de chequeo de dependencias."""
-        ret_code = proc.poll()
-        if ret_code is not None:
-            # Leer toda la salida combinada (stdout + stderr ya combinados)
-            all_output = ""
+        def check_deps_thread():
             try:
-                all_output = proc.stdout.read().strip() if proc.stdout else ""
-                proc.stdout.close()
-            except Exception:
-                pass
-
-            if ret_code == 0 and "OK_PLAYWRIGHT" in all_output:
+                # Forzar a Playwright a usar los navegadores globales del usuario al correr compilado
+                os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(
+                    os.path.expanduser("~"), "AppData", "Local", "ms-playwright"
+                )
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as p:
+                    # Usar un timeout bajo (15s) para la comprobación del navegador
+                    browser = p.chromium.launch(headless=True, timeout=15000)
+                    browser.close()
+                
                 logger.info("✅ Verificación de dependencias exitosa: Playwright y Chromium están listos y operativos.")
-            else:
-                logger.error(f"❌ Fallo en la verificación de dependencias: {all_output}")
-                # Clasificar el error y decidir la acción
-                self.root.after(0, lambda: self._handle_dep_check_failure(all_output))
-            return
+            except Exception as e:
+                err_detail = str(e)
+                logger.error(f"❌ Fallo en la verificación de dependencias: {err_detail}")
+                self.root.after(0, lambda: self._handle_dep_check_failure(err_detail))
 
-        # Verificar si excedió los 25 segundos (antivirus colgado o DLLs rotas)
-        elapsed = time.time() - start_time
-        if elapsed > 25:
-            try:
-                proc.kill()
-            except Exception:
-                pass
-            try:
-                proc.stdout.close()
-            except Exception:
-                pass
-            kill_playwright_orphans()
-            logger.critical("Timeout (25s) en la verificación de dependencias al inicio.")
-            self.root.after(0, lambda: self._handle_dep_check_failure("TIMEOUT_25S"))
-            return
-
-        # Seguir monitoreando
-        self.root.after(500, lambda: self._poll_startup_check(proc, start_time))
+        threading.Thread(target=check_deps_thread, daemon=True).start()
 
     def _handle_dep_check_failure(self, error_output):
         """Clasifica el error de dependencias y muestra un diálogo guiado al usuario."""
@@ -2756,11 +2730,29 @@ class AppGUI:
         sys.exit(0)
 
 
-# ---------------------------------------------------------------------------
-# Punto de Entrada Principal (Modo GUI)
-# ---------------------------------------------------------------------------
+# Variable global para mantener vivo el socket de instancia única
+_gui_single_instance_socket = None
 
 def main():
+    # Evitar colisión de múltiples instancias de la GUI
+    import socket
+    global _gui_single_instance_socket
+    try:
+        _gui_single_instance_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _gui_single_instance_socket.bind(("127.0.0.1", 18294)) # Usamos 18294 exclusivo para la GUI
+    except socket.error:
+        # El puerto ya está en uso, significa que ya hay otra GUI abierta
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showwarning(
+            "SiGCABot Activo",
+            "Ya hay una instancia de SiGCABot ejecutándose en tu sistema.\n\n"
+            "Por favor, revisa el área de notificaciones (System Tray) al lado de tu reloj."
+        )
+        sys.exit(0)
+
     # Levantar servicios en hilos secundarios
     threading.Thread(target=start_http_server, daemon=True).start()
     threading.Thread(target=start_telegram_poller, daemon=True).start()

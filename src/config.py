@@ -9,6 +9,7 @@ import sys
 import json
 import logging
 import threading
+import subprocess
 from datetime import datetime
 import ctypes
 import base64
@@ -16,7 +17,7 @@ import base64
 logger = logging.getLogger("SiGCABot")
 
 # Versión global de la aplicación
-APP_VERSION = "2.5.1"
+APP_VERSION = "2.5.2"
 
 # ---------------------------------------------------------------------------
 # Ofuscación / Encriptación simple de campos sensibles
@@ -415,33 +416,164 @@ def save_env_values(values):
         f.writelines(new_lines)
 
 # ---------------------------------------------------------------------------
-# Auto-inicio con Windows (Registro del usuario actual)
+# Auto-inicio con Windows (Registro HKCU + Carpeta Startup + Auto-Healing)
 # ---------------------------------------------------------------------------
 
+def get_expected_startup_command():
+    """Retorna la cadena exacta del comando que debe registrarse en el Auto-Inicio de Windows."""
+    if getattr(sys, 'frozen', False):
+        exe_path = os.path.abspath(sys.executable)
+        return f'"{exe_path}"'
+    else:
+        script_path = os.path.join(BASE_DIR, "app_gui.py")
+        py_exe = os.path.abspath(sys.executable)
+        return f'"{py_exe}" "{script_path}"'
+
+
+def sync_startup_shortcut(enabled):
+    """
+    Crea o elimina el acceso directo de respaldo en la carpeta Startup de Windows.
+    Ruta: %APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\SiGCABot.lnk
+    """
+    if os.name != 'nt':
+        return False
+
+    try:
+        appdata = os.environ.get("APPDATA")
+        if not appdata:
+            return False
+
+        startup_folder = os.path.join(appdata, r"Microsoft\Windows\Start Menu\Programs\Startup")
+        if not os.path.exists(startup_folder):
+            try:
+                os.makedirs(startup_folder, exist_ok=True)
+            except Exception:
+                return False
+
+        shortcut_path = os.path.join(startup_folder, "SiGCABot.lnk")
+
+        if enabled:
+            if getattr(sys, 'frozen', False):
+                target = os.path.abspath(sys.executable)
+                args = ""
+                work_dir = os.path.dirname(target)
+            else:
+                target = os.path.abspath(sys.executable)
+                script_path = os.path.join(BASE_DIR, "app_gui.py")
+                args = f'"{script_path}"'
+                work_dir = BASE_DIR
+
+            # Escapar comillas simples para evitar roturas de sintaxis en PowerShell si hay espacios o caracteres especiales en la ruta
+            sh_path_esc = shortcut_path.replace("'", "''")
+            target_esc = target.replace("'", "''")
+            args_esc = args.replace("'", "''")
+            work_dir_esc = work_dir.replace("'", "''")
+
+            ps_cmd = (
+                f"$WshShell = New-Object -ComObject WScript.Shell; "
+                f"$Shortcut = $WshShell.CreateShortcut('{sh_path_esc}'); "
+                f"$Shortcut.TargetPath = '{target_esc}'; "
+                f"$Shortcut.Arguments = '{args_esc}'; "
+                f"$Shortcut.WorkingDirectory = '{work_dir_esc}'; "
+                f"$Shortcut.Save()"
+            )
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                capture_output=True, text=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+            logger.info(f"Acceso directo de auto-inicio sincronizado en: {shortcut_path}")
+        else:
+            if os.path.exists(shortcut_path):
+                try:
+                    os.remove(shortcut_path)
+                    logger.info(f"Acceso directo de auto-inicio eliminado de: {shortcut_path}")
+                except Exception:
+                    pass
+        return True
+    except Exception as e:
+        logger.warning(f"No se pudo sincronizar el acceso directo de Inicio: {e}")
+        return False
+
+
 def set_startup(enabled):
-    """Registra o elimina la entrada de auto-inicio en el registro de Windows."""
-    exe_path = os.path.abspath(sys.argv[0])
+    """
+    Registra o elimina la entrada de auto-inicio en el Registro de Windows y en la carpeta Startup.
+    """
+    if os.name != 'nt':
+        return False
+
+    import winreg
     key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
     key_name = "SiGCALunchBot"
+    expected_cmd = get_expected_startup_command()
 
+    success = False
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
         if enabled:
-            if exe_path.endswith(".exe"):
-                winreg.SetValueEx(key, key_name, 0, winreg.REG_SZ, f'"{exe_path}"')
-            else:
-                script_path = os.path.join(BASE_DIR, "app_gui.py")
-                py_exe = sys.executable
-                winreg.SetValueEx(key, key_name, 0, winreg.REG_SZ, f'"{py_exe}" "{script_path}"')
-            logger.info("Auto-inicio registrado exitosamente.")
+            winreg.SetValueEx(key, key_name, 0, winreg.REG_SZ, expected_cmd)
+            logger.info(f"Auto-inicio registrado exitosamente en Registro de Windows: {expected_cmd}")
         else:
             try:
                 winreg.DeleteValue(key, key_name)
-                logger.info("Auto-inicio removido del registro.")
+                logger.info("Auto-inicio removido del Registro de Windows.")
             except FileNotFoundError:
                 pass
         winreg.CloseKey(key)
-        return True
+        success = True
     except Exception as e:
-        logger.error(f"Error al configurar inicio en registro de Windows: {e}")
+        logger.error(f"Error al configurar inicio en Registro de Windows: {e}")
+
+    # Sincronizar también en la carpeta Startup como respaldo
+    sync_startup_shortcut(enabled)
+    return success
+
+
+def check_and_repair_startup():
+    """
+    Inspecciona si el auto-inicio debe estar activo (según status.json).
+    Verifica que la clave en el registro exista y coincida con la ruta actual.
+    Si la clave no existe o la ruta cambió, la repara automáticamente (Auto-Healing).
+    """
+    if os.name != 'nt':
         return False
+
+    try:
+        status_info = load_status()
+        should_be_enabled = status_info.get("startup_on_boot", False)
+
+        import winreg
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        key_name = "SiGCALunchBot"
+        expected_cmd = get_expected_startup_command()
+
+        current_val = None
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
+            current_val, _ = winreg.QueryValueEx(key, key_name)
+            winreg.CloseKey(key)
+        except (FileNotFoundError, OSError):
+            current_val = None
+
+        if should_be_enabled:
+            # Si debe estar activado, comprobar si el valor es diferente o falta
+            if current_val != expected_cmd:
+                logger.info(f"⚠️ Desincronización detectada en Auto-Inicio. Registro actual: '{current_val}', Esperado: '{expected_cmd}'. Ejecutando Auto-Healing...")
+                set_startup(True)
+                return True
+            else:
+                # Asegurar que el acceso directo de respaldo en Startup también exista
+                sync_startup_shortcut(True)
+        else:
+            # Si debe estar desactivado pero la clave o acceso directo existen, limpiarlos
+            if current_val is not None:
+                logger.info("⚠️ Auto-Inicio desactivado en status.json pero presente en el Registro. Limpiando...")
+                set_startup(False)
+                return True
+            else:
+                sync_startup_shortcut(False)
+    except Exception as e:
+        logger.error(f"Error durante el chequeo y auto-reparación de Auto-Inicio: {e}")
+    return False
+

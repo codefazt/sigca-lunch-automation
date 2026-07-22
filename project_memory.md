@@ -96,6 +96,14 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   3. **Mapeo Inteligente de Días Excluidos (Teletrabajo):** Evaluación de `disabled_days` respecto al día objetivo del almuerzo consumible, permitiendo que marcar "Jueves" cancele automáticamente el pedido desde la tarde del Miércoles.
   4. **Optimización de Diagnóstico de Inicio:** Ampliación del timeout de `chromium.launch` en `--check-deps` (de 4s a 15s) y del timeout del subproceso en `app_gui.py` (de 8s a 25s) para erradicar falsas alertas de "Verificación Colgada" en arranques de Windows con carga inicial.
 
+### 15. Reforzamiento de Auto-Inicio y Mitigación de Colisiones (Versión 2.5.2)
+- **Hitos Completados:**
+  1. **Auto-Healing de Registro de Windows:** Implementación de `check_and_repair_startup()` en `src/config.py` que valida la existencia e integridad de la ruta del auto-inicio al arrancar la aplicación y la repara silenciosamente si está desactualizada.
+  2. **Doble Capa de Auto-Inicio (Carpeta Startup):** Creación y sincronización de un acceso directo `.lnk` nativo en la carpeta de Inicio de Windows (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`) como respaldo de contingencia si el Registro de Windows es bloqueado o limpiado.
+  3. **Recreación Limpia de Tareas y Accesos:** Automatización de la remoción completa y re-creación de las entradas en el Registro de Windows y en el Programador de Tareas al guardar cambios, eliminando residuos obsoletos.
+  4. **Single-Instance Check en GUI:** Sincronización del puerto `18294` al abrir la GUI para detectar instancias duplicadas abiertas y cerrarlas de forma temprana, previniendo sobreescritura de estado y logs.
+  5. **Verificación Directa en Hilos:** Refactorización de `verify_dependencies_startup` para realizar el chequeo de Playwright en un hilo en vez de subprocesos externos, evitando colisiones de comunicación y bloqueos con el loop de Tkinter.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
@@ -158,4 +166,9 @@ A continuación, se detallan los fallos históricos encontrados en el desarrollo
 ### 13. Falsa Alerta de "Verificación Colgada" por Timeouts Rígidos de Inicio (4s/8s)
 * **Fallo:** Al abrir la GUI, el subproceso de comprobación de dependencias (`--check-deps`) fallaba frecuentemente en máquinas con carga inicial debido a un timeout muy ajustado de 4000ms en `chromium.launch` y 8 segundos en el monitoreo del subproceso. Esto hacía creer a la aplicación que Chromium o las DLLs de C++ no estaban instaladas, desplegando repetidamente la ventana modal de reparación a pesar de que el entorno estaba 100% listo.
 * **Solución:** Se amplió el tiempo límite interno de `launch` en `--check-deps` a 15,000ms (15s) y el tiempo máximo del subproceso a 25 segundos en `app_gui.py`, permitiendo que el arranque normal de Python/Playwright responda `OK_PLAYWRIGHT` (típicamente en 2-4 segundos) de forma limpia sin generar falsos positivos.
+
+### 14. Fallo de Conexión del Driver de Playwright (`Connection closed while reading from driver`) en el Subproceso del GUI
+* **Fallo:** Al iniciar la app, el subproceso de diagnóstico `--check-deps` fallaba bajo ciertas condiciones de red o cuando se heredaban variables de entorno de la GUI. Esto lanzaba un error del `PlaywrightContextManager` al inicializar el canal IPC de Node.js, provocando la aparición de la falsa modal emergente de "Navegador no encontrado" a pesar de que las dependencias estaban instaladas correctamente.
+* **Solución:** Se refactorizó la verificación inicial de dependencias para ejecutarse directamente en un hilo de Python secundario (`check_deps_thread`) dentro del mismo proceso de la GUI en lugar de iniciar un subproceso Python secundario mediante la consola de comandos. Esto previene colisiones IPC de Windows, agiliza el tiempo de arranque de la GUI a la mitad y captura las excepciones de forma nativa.
+
 
