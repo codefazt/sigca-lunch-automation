@@ -882,7 +882,9 @@ class PremiumDownloadProgressBox(tk.Toplevel):
         self.resizable(False, False)
         self.transient(parent)
         self.withdraw()
-        self.overrideredirect(True)
+
+        # Deshabilitar el botón cerrar de la barra de título nativa para evitar cierres corruptos de descarga
+        self.protocol("WM_DELETE_WINDOW", lambda: None)
 
         self.download_url = download_url
         self.on_success = on_success
@@ -938,8 +940,7 @@ class PremiumDownloadProgressBox(tk.Toplevel):
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.deiconify()
         self.lift()
-        self.attributes("-topmost", True)
-        self.grab_set()
+        self.focus_force()
 
         # Iniciar descarga en hilo secundario
         threading.Thread(target=self._download_thread, daemon=True).start()

@@ -108,6 +108,10 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
 - **Hitos Completados:**
   1. **Resolución de UnboundLocalError en main():** Eliminación de las declaraciones redundantes de importación de `tk` y `messagebox` dentro del bloque de manejo de excepciones en `main()`, asegurando que use las variables globales ya definidas en la cabecera y resolviendo el error de inicialización del socket de instancia única.
 
+### 17. Modal de Descarga No Intrusivo (Versión 2.5.4)
+- **Hitos Completados:**
+  1. **Actualización de Diálogo de Descarga:** Modificación de `PremiumDownloadProgressBox` en `app_gui.py` para eliminar las directivas `overrideredirect(True)` (borde forzado) y `self.attributes("-topmost", True)` (siempre al frente), además del bloqueo modal `self.grab_set()`. Esto dota a la ventana de bordes de sistema y botones de minimización nativos, y evita que se mantenga permanentemente flotando sobre todas las demás aplicaciones de usuario, permitiendo minimizarla durante la descarga sin bloquear el escritorio.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
