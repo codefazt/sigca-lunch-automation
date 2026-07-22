@@ -145,3 +145,77 @@ def send_telegram_photo(token, chat_id, photo_path, caption=None):
         else:
             logger.error(f"Error al enviar foto a Telegram: {e}")
         return False
+
+# ---------------------------------------------------------------------------
+# Notificaciones por Correo Electrónico — SMTP (Gmail)
+# ---------------------------------------------------------------------------
+
+def send_email_notification(to_email, subject, body_html, image_path=None, sender_email=None, sender_password=None):
+    """
+    Envía un correo electrónico de notificación (HTML) usando SMTP de Gmail.
+
+    Args:
+        to_email: Correo destinatario (ej. correo corporativo).
+        subject: Asunto del correo.
+        body_html: Cuerpo del correo en formato HTML.
+        image_path: Ruta a la captura de pantalla (.png) opcional.
+        sender_email: Correo remitente (Gmail). Si no se pasa, se lee de .env.
+        sender_password: Contraseña de aplicación de Gmail. Si no se pasa, se lee de .env.
+
+    Returns:
+        True si se envió con éxito, False en caso contrario.
+    """
+    import smtplib
+    from email.message import EmailMessage
+
+    if not sender_email or not sender_password:
+        from src.config import load_env_dict
+        env = load_env_dict()
+        sender_email = sender_email or env.get("SMTP_SENDER_EMAIL", "johancarmino346@gmail.com")
+        sender_password = sender_password or env.get("SMTP_SENDER_PASSWORD", "")
+
+    # Limpiar espacios en blanco
+    sender_email = (sender_email or "").strip()
+    sender_password = (sender_password or "").strip()
+    to_email = (to_email or "").strip()
+
+    if not sender_email or not sender_password:
+        logger.warning("Credenciales SMTP de correo remitente no configuradas (SMTP_SENDER_EMAIL / SMTP_SENDER_PASSWORD). Omitiendo correo.")
+        return False
+
+    if not to_email:
+        logger.warning("Correo destinatario no proporcionado. Omitiendo notificación por correo.")
+        return False
+
+    logger.info(f"Enviando notificación por correo electrónico a {to_email}...")
+
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = f"SiGCABot Notificaciones <{sender_email}>"
+    msg['To'] = to_email
+
+    msg.set_content("SiGCABot Notificación (habilite la vista HTML en su cliente de correo para ver detalles).")
+    msg.add_alternative(body_html, subtype='html')
+
+    # Adjuntar captura de pantalla si existe
+    if image_path and os.path.exists(image_path):
+        try:
+            with open(image_path, 'rb') as f:
+                img_data = f.read()
+            filename = os.path.basename(image_path)
+            msg.add_attachment(img_data, maintype='image', subtype='png', filename=filename)
+            logger.info(f"Captura de pantalla adjuntada al correo: {filename}")
+        except Exception as e:
+            logger.warning(f"No se pudo adjuntar la imagen {image_path} al correo: {e}")
+
+    try:
+        # Usamos SMTP SSL en puerto 465 (Gmail)
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=15) as server:
+            server.login(sender_email, sender_password)
+            server.send_message(msg)
+        logger.info("✅ Correo electrónico de notificación enviado con éxito.")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Error al enviar correo electrónico por SMTP: {e}")
+        return False
+

@@ -72,3 +72,39 @@ def test_send_telegram_photo_missing_inputs():
     """Prueba que el envío de fotos a Telegram falle con parámetros vacíos o inválidos."""
     result = send_telegram_photo(None, None, None)
     assert result is False
+
+
+@patch('smtplib.SMTP_SSL')
+def test_send_email_notification_success(mock_smtp):
+    """Prueba el envío exitoso de correo electrónico vía SMTP de Gmail."""
+    from src.notifications import send_email_notification
+    mock_server = MagicMock()
+    mock_smtp.return_value.__enter__.return_value = mock_server
+
+    result = send_email_notification(
+        to_email="corporativo@ex-cle.com",
+        subject="Test Subject",
+        body_html="<h1>Test</h1>",
+        sender_email="johancarmino346@gmail.com",
+        sender_password="app_password_test"
+    )
+
+    assert result is True
+    mock_smtp.assert_called_once_with('smtp.gmail.com', 465, timeout=15)
+    mock_server.login.assert_called_once_with("johancarmino346@gmail.com", "app_password_test")
+    mock_server.send_message.assert_called_once()
+
+
+def test_send_email_notification_missing_credentials():
+    """Prueba que el envío de correo falle si no se configuran las credenciales SMTP."""
+    from src.notifications import send_email_notification
+    with patch('src.config.load_env_dict', return_value={}):
+        result = send_email_notification(
+            to_email="corporativo@ex-cle.com",
+            subject="Test",
+            body_html="<p>Test</p>",
+            sender_email="",
+            sender_password=""
+        )
+        assert result is False
+

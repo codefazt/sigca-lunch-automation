@@ -89,6 +89,8 @@ class LunchBot:
         self.url = env.get("SIGCA_URL", "https://sigca.ex-cle.com/")
         self.telegram_token = env.get("TELEGRAM_TOKEN")
         self.telegram_chat_id = env.get("TELEGRAM_CHAT_ID")
+        self.smtp_email = env.get("SMTP_SENDER_EMAIL", "johancarmino346@gmail.com")
+        self.smtp_password = env.get("SMTP_SENDER_PASSWORD", "")
 
         if not self.username:
             raise ValueError("Falta la variable de entorno SIGCA_USER")
@@ -123,6 +125,71 @@ class LunchBot:
             args=(self.telegram_token, self.telegram_chat_id, photo_path, caption),
             daemon=True
         ).start()
+
+    def _notify_email(self, subject, body_html, image_path=None):
+        threading.Thread(
+            target=notifications.send_email_notification,
+            args=(self.username, subject, body_html, image_path, self.smtp_email, self.smtp_password),
+            daemon=True
+        ).start()
+
+    def _send_email_success(self, status_text, evidence_path=None, is_dry_run=False, is_cancellation=False):
+        target_date = get_target_lunch_date().strftime("%Y-%m-%d")
+        fav_menu = self.config.get("favorite_menu", "Estándar")
+        
+        if is_cancellation:
+            subject = f"ℹ️ Almuerzo Cancelado Exitosamente - SiGCABot ({target_date})"
+            title_text = "🚫 Almuerzo Cancelado Exitosamente"
+            body_intro = "Tu solicitud de almuerzo ha sido cancelada en SiGCA."
+            border_color = "#0acbe6"
+        elif is_dry_run:
+            subject = f"[SIMULACIÓN] 🍱 Prueba de Pedido Exitosa - SiGCABot ({target_date})"
+            title_text = "🤖 Simulación de Pedido Exitosa"
+            body_intro = "Se ha verificado la automatización en modo simulación."
+            border_color = "#0acbe6"
+        else:
+            subject = f"🍱 Solicitud de Almuerzo Exitosa - SiGCABot ({target_date})"
+            title_text = "🍱 ¡Solicitud de Almuerzo Confirmada!"
+            body_intro = f"Se ha registrado exitosamente la solicitud de almuerzo para el día <b>{target_date}</b>."
+            border_color = "#0acbe6"
+
+        body_html = f"""
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #010a13; color: #f0e6d2; padding: 25px; border-radius: 8px; border: 1px solid {border_color};">
+            <h2 style="color: {border_color}; margin-top: 0;">{title_text}</h2>
+            <p>Hola <b>{html.escape(self.username or '')}</b>,</p>
+            <p>{body_intro}</p>
+            <div style="background-color: #091428; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid {border_color};">
+                <p style="margin: 3px 0;"><b>Fecha Objetivo:</b> {target_date}</p>
+                <p style="margin: 3px 0;"><b>Menú Favorito:</b> {html.escape(fav_menu)}</p>
+                <p style="margin: 3px 0;"><b>Detalles:</b> {html.escape(status_text)}</p>
+            </div>
+            <p style="font-size: 13px; color: #a09b8c;"><i>Adjunto a este correo encontrarás la captura de pantalla como evidencia del proceso.</i></p>
+            <hr style="border: 0; border-top: 1px solid #1e2328; margin-top: 20px;" />
+            <p style="font-size: 11px; color: #785a28; margin-bottom: 0;">SiGCABot Automation System • {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+        </div>
+        """
+        self._notify_email(subject, body_html, evidence_path)
+
+    def _send_email_error(self, error_msg, evidence_path=None, is_cancellation=False):
+        target_date = get_target_lunch_date().strftime("%Y-%m-%d")
+        action_str = "Cancelación de Almuerzo" if is_cancellation else "Solicitud de Almuerzo"
+        subject = f"❌ Fallo en {action_str} - SiGCABot ({target_date})"
+        
+        body_html = f"""
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #010a13; color: #f0e6d2; padding: 25px; border-radius: 8px; border: 1px solid #c83232;">
+            <h2 style="color: #c83232; margin-top: 0;">❌ Fallo en {action_str}</h2>
+            <p>Hola <b>{html.escape(self.username or '')}</b>,</p>
+            <p>No se pudo completar la operación de {action_str.lower()} para el día <b>{target_date}</b>.</p>
+            <div style="background-color: #091428; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #c83232;">
+                <p style="margin: 3px 0; color: #f0e6d2;"><b>Detalle del Error:</b></p>
+                <code style="color: #ff6b6b; font-family: monospace; display: block; margin-top: 5px;">{html.escape(error_msg)}</code>
+            </div>
+            <p style="font-size: 13px; color: #a09b8c;"><i>Adjunto a este correo encontrarás la captura de pantalla registrada al momento del fallo.</i></p>
+            <hr style="border: 0; border-top: 1px solid #1e2328; margin-top: 20px;" />
+            <p style="font-size: 11px; color: #785a28; margin-bottom: 0;">SiGCABot Automation System • {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+        </div>
+        """
+        self._notify_email(subject, body_html, evidence_path)
 
     # ------------------------------------------------------------------
     # Validación horaria
@@ -724,6 +791,7 @@ class LunchBot:
                             self._notify_telegram(f"🤖 <b>Prueba Dry-Run Exitosa</b>:\n{html.escape(last_msg)}")
                             if last_evidence:
                                 self._notify_telegram_photo(last_evidence, "Dry Run Completado")
+                            self._send_email_success(last_msg, last_evidence, is_dry_run=True)
                             return 0, last_msg, last_evidence
                         else:
                             logger.info("Haciendo clic en el botón de solicitud...")
@@ -749,6 +817,7 @@ class LunchBot:
                             self._notify_telegram(f"✅ <b>Almuerzo Solicitado Exitosamente</b>:\n{html.escape(status_text)}")
                             if last_evidence:
                                 self._notify_telegram_photo(last_evidence, "Confirmación de Pedido")
+                            self._send_email_success(status_text, last_evidence, is_dry_run=False)
                             return 0, last_msg, last_evidence
 
                     except Exception as inner_e:
@@ -787,12 +856,14 @@ class LunchBot:
             self._notify_telegram(f"⚠️ <b>Error en SiGCA</b>:\n<pre>{html.escape(last_msg)}</pre>")
             if last_evidence:
                 self._notify_telegram_photo(last_evidence, "Formulario No Identificado")
+            self._send_email_error(last_msg, last_evidence)
             return 2, last_msg, last_evidence
 
         self._notify_toast("Error en Automatización", "Ocurrió un error inesperado al procesar la solicitud tras 3 intentos.")
         self._notify_telegram(f"❌ <b>Fallo en Automatización de Almuerzo (3 intentos)</b>:\n<pre>{html.escape(last_msg)}</pre>")
         if last_evidence:
             self._notify_telegram_photo(last_evidence, "Captura de Error de Solicitud (Último Intento)")
+        self._send_email_error(last_msg, last_evidence)
             
         return last_exit_code, last_msg, last_evidence
 
@@ -939,6 +1010,7 @@ class LunchBot:
                         self._notify_telegram(f"🚫 <b>Cancelación Exitosa</b>:\n{last_msg}")
                         if last_evidence:
                             self._notify_telegram_photo(last_evidence, "Confirmación de Cancelación")
+                        self._send_email_success(last_msg, last_evidence, is_cancellation=True)
                         return 0, last_msg, last_evidence
 
                     except Exception as inner_e:
@@ -977,6 +1049,7 @@ class LunchBot:
             self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{last_msg}")
             if last_evidence:
                 self._notify_telegram_photo(last_evidence, "Pantalla de Cancelación no Disponible")
+            self._send_email_error(last_msg, last_evidence, is_cancellation=True)
             return 2, last_msg, last_evidence
         
         if "deshabilitado" in last_msg:
@@ -984,11 +1057,13 @@ class LunchBot:
             self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{last_msg}")
             if last_evidence:
                 self._notify_telegram_photo(last_evidence, "Botón de Cancelación Deshabilitado")
+            self._send_email_error(last_msg, last_evidence, is_cancellation=True)
             return 2, last_msg, last_evidence
 
         self._notify_toast("Error al Cancelar", "Ocurrió un error inesperado al cancelar tras 3 intentos.")
         self._notify_telegram(f"❌ <b>Fallo al Cancelar Almuerzo (3 intentos)</b>:\n<pre>{html.escape(last_msg)}</pre>")
         if last_evidence:
             self._notify_telegram_photo(last_evidence, "Captura de Error de Cancelación (Último Intento)")
+        self._send_email_error(last_msg, last_evidence, is_cancellation=True)
             
         return last_exit_code, last_msg, last_evidence

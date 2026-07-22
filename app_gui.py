@@ -1494,7 +1494,27 @@ class AppGUI:
         self.style_button(self.tg_test_btn, "primary")
         group_tg.columnconfigure(1, weight=1)
 
-        # --- Grupo 3: Preferencias del Sistema ---
+        # --- Grupo 3: Correo Electrónico (Gmail SMTP) ---
+        group_email = tk.Frame(scrollable_frame, bg=BG_CARD, bd=1, highlightbackground="#1e2328", highlightthickness=1)
+        group_email.pack(fill="x", pady=10, padx=5)
+
+        title_email = tk.Label(group_email, text="CONFIGURACIÓN DE NOTIFICACIONES POR CORREO (SMTP GMAIL)", font=("Segoe UI", 8, "bold"), bg=BG_CARD, fg=ACCENT)
+        title_email.grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 5))
+
+        tk.Label(group_email, text="Correo Remitente (Gmail):", bg=BG_CARD, fg=FG_TEXT).grid(row=1, column=0, sticky="w", padx=15, pady=6)
+        self.smtp_user_ent = tk.Entry(group_email, bg=BG_INPUT, fg=FG_TEXT, bd=0, width=50, insertbackground=FG_TEXT)
+        self.smtp_user_ent.grid(row=1, column=1, columnspan=2, sticky="ew", padx=(0, 15), pady=6, ipady=3)
+
+        tk.Label(group_email, text="Contraseña de Aplicación:", bg=BG_CARD, fg=FG_TEXT).grid(row=2, column=0, sticky="w", padx=15, pady=6)
+        self.smtp_pass_ent = tk.Entry(group_email, bg=BG_INPUT, fg=FG_TEXT, bd=0, show="*", width=35, insertbackground=FG_TEXT)
+        self.smtp_pass_ent.grid(row=2, column=1, sticky="w", pady=6, ipady=3)
+
+        self.email_test_btn = tk.Button(group_email, text="Probar Correo", font=("Segoe UI", 9, "bold"), command=self.test_email_connection)
+        self.email_test_btn.grid(row=2, column=2, sticky="e", padx=(5, 15), pady=6, ipady=2)
+        self.style_button(self.email_test_btn, "primary")
+        group_email.columnconfigure(1, weight=1)
+
+        # --- Grupo 4: Preferencias del Sistema ---
         group_pref = tk.Frame(scrollable_frame, bg=BG_CARD, bd=1, highlightbackground="#1e2328", highlightthickness=1)
         group_pref.pack(fill="x", pady=10, padx=5)
         
@@ -1815,6 +1835,8 @@ class AppGUI:
         self.pass_ent.insert(0, env.get("SIGCA_PASSWORDS", ""))
         self.tg_token_ent.insert(0, env.get("TELEGRAM_TOKEN", ""))
         self.tg_chat_ent.insert(0, env.get("TELEGRAM_CHAT_ID", ""))
+        self.smtp_user_ent.insert(0, env.get("SMTP_SENDER_EMAIL", "johancarmino346@gmail.com"))
+        self.smtp_pass_ent.insert(0, env.get("SMTP_SENDER_PASSWORD", ""))
 
         config = load_config()
         self.menu_cb.set(config.get("prefer_menu", "saludable").capitalize())
@@ -1853,14 +1875,14 @@ class AppGUI:
 
     def show_loading(self, text):
         self.loading_lbl.configure(text=text)
-        for btn in [self.save_btn, self.test_btn, self.manual_btn, self.tg_test_btn, self.cancel_btn, self.toggle_btn, self.refresh_cancellations_btn]:
+        for btn in [self.save_btn, self.test_btn, self.manual_btn, self.tg_test_btn, self.email_test_btn, self.cancel_btn, self.toggle_btn, self.refresh_cancellations_btn]:
             btn.configure(state="disabled")
         self.cancelled_chk.configure(state="disabled")
         self.root.update_idletasks()
 
     def hide_loading(self):
         self.loading_lbl.configure(text="")
-        for btn in [self.save_btn, self.test_btn, self.manual_btn, self.tg_test_btn, self.cancel_btn, self.toggle_btn, self.refresh_cancellations_btn]:
+        for btn in [self.save_btn, self.test_btn, self.manual_btn, self.tg_test_btn, self.email_test_btn, self.cancel_btn, self.toggle_btn, self.refresh_cancellations_btn]:
             btn.configure(state="normal")
         self.cancelled_chk.configure(state="normal")
         self.root.update_idletasks()
@@ -1873,6 +1895,8 @@ class AppGUI:
         passwords = self.pass_ent.get().strip()
         tg_token = self.tg_token_ent.get().strip()
         tg_chat = self.tg_chat_ent.get().strip()
+        smtp_user = self.smtp_user_ent.get().strip()
+        smtp_pass = self.smtp_pass_ent.get().strip()
 
         if not url or not user or not passwords:
             self.hide_loading()
@@ -1885,7 +1909,9 @@ class AppGUI:
             "SIGCA_USER": user,
             "SIGCA_PASSWORDS": passwords,
             "TELEGRAM_TOKEN": tg_token,
-            "TELEGRAM_CHAT_ID": tg_chat
+            "TELEGRAM_CHAT_ID": tg_chat,
+            "SMTP_SENDER_EMAIL": smtp_user,
+            "SMTP_SENDER_PASSWORD": smtp_pass
         })
 
         config = load_config()
@@ -1951,6 +1977,53 @@ class AppGUI:
         else:
             logger.error("Error al enviar mensaje de prueba a Telegram.")
             show_custom_error("Error de Envío", "No se pudo conectar con Telegram. Revisa el token, el Chat ID o la conexión a internet.")
+
+    def test_email_connection(self):
+        smtp_user = self.smtp_user_ent.get().strip()
+        smtp_pass = self.smtp_pass_ent.get().strip()
+        dest_email = self.user_ent.get().strip()
+
+        if not smtp_user or not smtp_pass:
+            show_custom_warning("Faltan Credenciales", "Por favor ingresa el Correo Remitente y la Contraseña de Aplicación de Gmail.")
+            return
+
+        if not dest_email:
+            show_custom_warning("Falta Correo Corporativo", "Por favor ingresa el Correo Corporativo para recibir la prueba de correo.")
+            return
+
+        self.show_loading("Enviando correo de prueba vía Gmail SMTP...")
+
+        def run_test():
+            from src.notifications import send_email_notification
+            body_html = f"""
+            <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #010a13; color: #f0e6d2; padding: 25px; border-radius: 8px; border: 1px solid #0acbe6;">
+                <h2 style="color: #0acbe6; margin-top: 0;">📧 Prueba de Notificación por Correo</h2>
+                <p>Hola <b>{html.escape(dest_email)}</b>,</p>
+                <p>¡La prueba de comunicación por correo electrónico en <b>SiGCABot</b> ha sido exitosa!</p>
+                <p>A partir de ahora recibirás notificaciones en este correo corporativo al solicitar o cancelar tus almuerzos con la evidencia adjunta.</p>
+                <hr style="border: 0; border-top: 1px solid #1e2328; margin-top: 20px;" />
+                <p style="font-size: 11px; color: #785a28; margin-bottom: 0;">SiGCABot Automation System • {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+            </div>
+            """
+            success = send_email_notification(
+                to_email=dest_email,
+                subject="📧 Prueba de Notificación por Correo - SiGCABot",
+                body_html=body_html,
+                sender_email=smtp_user,
+                sender_password=smtp_pass
+            )
+            self.root.after(0, lambda: self._finish_email_test(success))
+
+        threading.Thread(target=run_test, daemon=True).start()
+
+    def _finish_email_test(self, success):
+        self.hide_loading()
+        if success:
+            logger.info("Prueba de envío de correo exitosa.")
+            show_custom_success("Prueba Exitosa", "¡Correo de prueba enviado exitosamente a tu bandeja corporativa!")
+        else:
+            logger.error("Error al enviar el correo de prueba.")
+            show_custom_error("Error de Envío", "No se pudo enviar el correo. Revisa el correo remitente y la contraseña de aplicación de Gmail.")
 
     def run_dry_run_test(self):
         self.run_bot_subprocess(["--run-job", "--dry-run", "--force-time", "--from-gui"], "dry_run", "Iniciando simulación del pedido en seco (Dry Run). Por favor espera...")

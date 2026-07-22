@@ -112,6 +112,12 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
 - **Hitos Completados:**
   1. **Actualización de Diálogo de Descarga:** Modificación de `PremiumDownloadProgressBox` en `app_gui.py` para eliminar las directivas `overrideredirect(True)` (borde forzado) y `self.attributes("-topmost", True)` (siempre al frente), además del bloqueo modal `self.grab_set()`. Esto dota a la ventana de bordes de sistema y botones de minimización nativos, y evita que se mantenga permanentemente flotando sobre todas las demás aplicaciones de usuario, permitiendo minimizarla durante la descarga sin bloquear el escritorio.
 
+### 18. Sistema de Notificaciones por Correo Electrónico (Versión 2.6.0)
+- **Hitos Completados:**
+  1. **Envío Nativo SMTP por Gmail:** Implementación de `send_email_notification` en `src/notifications.py` usando las librerías estándar de Python `smtplib` y `email.message.EmailMessage` vía SSL en `smtp.gmail.com:465`.
+  2. **Maquetación HTML & Evidencia Adjunta:** Formateo de plantillas HTML oscuras estilizadas para correos de éxito, error y cancelación, adjuntando la captura de pantalla `.png` como evidencia.
+  3. **Integración en Motor y GUI:** Incorporación de variables `SMTP_SENDER_EMAIL` y `SMTP_SENDER_PASSWORD` en `.env` y en la pestaña de Configuración de la GUI, incluyendo un botón para "Probar Correo".
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
