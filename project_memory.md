@@ -129,6 +129,12 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   2. **Protección y Ocultamiento de Contraseña:** Se eliminó la caja de texto de la contraseña de aplicación de la interfaz gráfica, protegiéndola exclusivamente en el archivo `.env`.
   3. **Comportamiento Opcional y Cobertura Total:** Confirmado que si las credenciales SMTP no están presentes, el bot omite silenciosamente la notificación por correo (igual que Telegram) en todos los escenarios (Simulación/Dry-Run, Automatización Horaria, Solicitud Manual y Cancelación) enviando reportes maquetados para éxito y error.
 
+### 21. Corrección de Desempacado de Fecha y Cobertura Total de Notificaciones por Correo (Versión 2.6.3)
+- **Hitos Completados:**
+  1. **Corrección de AttributeError en `get_target_lunch_date()`:** Inclusión de desempacado de tupla `target_dt, day_name = get_target_lunch_date()` en `_send_email_success` y `_send_email_error` en `src/bot_engine.py`, resolviendo la excepción `AttributeError: 'tuple' object has no attribute 'strftime'` que prevenía el despacho del correo.
+  2. **Integración en Ramas de Salida Prematura:** Adición de llamadas a `_send_email_success` / `_send_email_error` en las ramas de `login_failed`, `already_ordered` ("Almuerzo ya solicitado") y `is_closed` ("Formulario cerrado"), asegurando que todas las ejecuciones (Manuales, Dry-Run y Programadas) manden su correo correspondiente.
+  3. **Registro Transparente en Consola (Logs):** Adición de trazas explícitas de `logger.info` al despachar el correo y adjuntar las capturas de pantalla de evidencia para visualización en tiempo real desde la GUI.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)

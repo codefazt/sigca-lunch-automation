@@ -17,7 +17,7 @@ import base64
 logger = logging.getLogger("SiGCABot")
 
 # Versión global de la aplicación
-APP_VERSION = "2.6.2"
+APP_VERSION = "2.6.3"
 
 # ---------------------------------------------------------------------------
 # Ofuscación / Encriptación simple de campos sensibles

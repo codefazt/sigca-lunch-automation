@@ -127,6 +127,7 @@ class LunchBot:
         ).start()
 
     def _notify_email(self, subject, body_html, image_path=None):
+        logger.info(f"Despachando correo electrónico ('{subject}')...")
         threading.Thread(
             target=notifications.send_email_notification,
             args=(self.username, subject, body_html, image_path, self.smtp_email, self.smtp_password),
@@ -134,7 +135,8 @@ class LunchBot:
         ).start()
 
     def _send_email_success(self, status_text, evidence_path=None, is_dry_run=False, is_cancellation=False):
-        target_date = get_target_lunch_date().strftime("%Y-%m-%d")
+        target_dt, day_name = get_target_lunch_date()
+        target_date = target_dt.strftime("%Y-%m-%d")
         fav_menu = self.config.get("favorite_menu", "Estándar")
         
         if is_cancellation:
@@ -150,7 +152,7 @@ class LunchBot:
         else:
             subject = f"🍱 Solicitud de Almuerzo Exitosa - SiGCABot ({target_date})"
             title_text = "🍱 ¡Solicitud de Almuerzo Confirmada!"
-            body_intro = f"Se ha registrado exitosamente la solicitud de almuerzo para el día <b>{target_date}</b>."
+            body_intro = f"Se ha registrado exitosamente la solicitud de almuerzo para el día <b>{target_date} ({day_name})</b>."
             border_color = "#0acbe6"
 
         body_html = f"""
@@ -159,7 +161,7 @@ class LunchBot:
             <p>Hola <b>{html.escape(self.username or '')}</b>,</p>
             <p>{body_intro}</p>
             <div style="background-color: #091428; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid {border_color};">
-                <p style="margin: 3px 0;"><b>Fecha Objetivo:</b> {target_date}</p>
+                <p style="margin: 3px 0;"><b>Fecha Objetivo:</b> {target_date} ({day_name})</p>
                 <p style="margin: 3px 0;"><b>Menú Favorito:</b> {html.escape(fav_menu)}</p>
                 <p style="margin: 3px 0;"><b>Detalles:</b> {html.escape(status_text)}</p>
             </div>
@@ -171,7 +173,8 @@ class LunchBot:
         self._notify_email(subject, body_html, evidence_path)
 
     def _send_email_error(self, error_msg, evidence_path=None, is_cancellation=False):
-        target_date = get_target_lunch_date().strftime("%Y-%m-%d")
+        target_dt, day_name = get_target_lunch_date()
+        target_date = target_dt.strftime("%Y-%m-%d")
         action_str = "Cancelación de Almuerzo" if is_cancellation else "Solicitud de Almuerzo"
         subject = f"❌ Fallo en {action_str} - SiGCABot ({target_date})"
         
@@ -179,7 +182,7 @@ class LunchBot:
         <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #010a13; color: #f0e6d2; padding: 25px; border-radius: 8px; border: 1px solid #c83232;">
             <h2 style="color: #c83232; margin-top: 0;">❌ Fallo en {action_str}</h2>
             <p>Hola <b>{html.escape(self.username or '')}</b>,</p>
-            <p>No se pudo completar la operación de {action_str.lower()} para el día <b>{target_date}</b>.</p>
+            <p>No se pudo completar la operación de {action_str.lower()} para el día <b>{target_date} ({day_name})</b>.</p>
             <div style="background-color: #091428; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #c83232;">
                 <p style="margin: 3px 0; color: #f0e6d2;"><b>Detalle del Error:</b></p>
                 <code style="color: #ff6b6b; font-family: monospace; display: block; margin-top: 5px;">{html.escape(error_msg)}</code>
@@ -593,6 +596,7 @@ class LunchBot:
                         self._notify_telegram(f"❌ <b>Error de Inicio de Sesión SiGCA</b>:\n{html.escape(last_msg)}")
                         if last_evidence:
                             self._notify_telegram_photo(last_evidence, "Error de Inicio de Sesión")
+                        self._send_email_error(last_msg, last_evidence)
                         return 1, last_msg, last_evidence
 
                     try:
@@ -652,6 +656,7 @@ class LunchBot:
                             browser.close()
                             self._notify_toast("Almuerzo Ya Solicitado", "El almuerzo ya fue solicitado previamente.")
                             self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{html.escape(last_msg)}")
+                            self._send_email_success(last_msg, last_evidence)
                             return 0, last_msg, last_evidence
 
                         # Verificar si el formulario está cerrado
@@ -672,6 +677,7 @@ class LunchBot:
                             self._notify_telegram(f"⚠️ <b>Formulario Cerrado en SiGCA</b>:\n{html.escape(last_msg)}")
                             if last_evidence:
                                 self._notify_telegram_photo(last_evidence, "Formulario Cerrado")
+                            self._send_email_error(last_msg, last_evidence)
                             return 2, last_msg, last_evidence
 
                         # --- Selección de Menú ---
