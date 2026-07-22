@@ -1991,10 +1991,15 @@ class AppGUI:
         env = load_env_dict()
         smtp_user = env.get("SMTP_SENDER_EMAIL", "johancarmino346@gmail.com")
         smtp_pass = env.get("SMTP_SENDER_PASSWORD", "")
+        
+        if not smtp_pass:
+            from src.config import DEFAULT_SMTP_PASSWORD_OBFUSCATED, deobfuscate_text
+            smtp_pass = deobfuscate_text(DEFAULT_SMTP_PASSWORD_OBFUSCATED)
+
         dest_email = self.user_ent.get().strip()
 
         if not smtp_user or not smtp_pass:
-            show_custom_warning("Faltan Credenciales", "No se encontraron credenciales SMTP (SMTP_SENDER_EMAIL / SMTP_SENDER_PASSWORD) en el archivo .env.")
+            show_custom_warning("Faltan Credenciales", "No se encontraron credenciales SMTP.")
             return
 
         if not dest_email:

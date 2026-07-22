@@ -17,7 +17,7 @@ import base64
 logger = logging.getLogger("SiGCABot")
 
 # Versión global de la aplicación
-APP_VERSION = "2.6.4"
+APP_VERSION = "2.6.5"
 
 # ---------------------------------------------------------------------------
 # Ofuscación / Encriptación simple de campos sensibles
@@ -46,6 +46,9 @@ def deobfuscate_text(obfuscated):
         # Si no es base64 válido o falla la descodificación, retornamos el texto
         # original para compatibilidad con .env sin ofuscar (texto plano)
         return obfuscated
+
+# Credencial por defecto del remitente corporativo
+DEFAULT_SMTP_PASSWORD_OBFUSCATED = "IQMzIWElBAc4RQcUGhNrAgFHUg=="
 
 # ---------------------------------------------------------------------------
 # Inicialización del entorno (se ejecuta al importar este módulo)

@@ -146,6 +146,11 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   1. **Consolidación de Notificaciones:** Se confirmó el correcto funcionamiento de los correos electrónicos en todos los escenarios del ciclo de automatización de forma sincrónica para evitar interrupciones prematuras.
   2. **Actualización Final de la Aplicación:** Actualización de la versión a 2.6.4 y empaquetado del binario con soporte integral para envío de correos corporativos vía SMTP de Gmail.
 
+### 24. Integración Automática de Credenciales SMTP (Versión 2.6.5)
+- **Hitos Completados:**
+  1. **Credenciales Embebidas:** Se ofuscó e integró la contraseña de aplicación de Gmail directamente en el código fuente. Esto soluciona el problema de los usuarios que instalan la aplicación de forma limpia usando el archivo `.env.template` (el cual, por razones de seguridad, no incluye contraseñas).
+  2. **Transparencia para el Usuario Final:** La GUI y el motor de notificaciones ahora tienen un mecanismo de respaldo (*fallback*) robusto. Si `.env` no tiene la contraseña SMTP, el sistema lee la credencial embebida ofuscada, permitiendo probar y enviar correos instantáneamente sin necesidad de configuraciones manuales o alertas de "Faltan Credenciales".
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)

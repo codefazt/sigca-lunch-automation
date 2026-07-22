@@ -169,10 +169,16 @@ def send_email_notification(to_email, subject, body_html, image_path=None, sende
     from email.message import EmailMessage
 
     if not sender_email or not sender_password:
-        from src.config import load_env_dict
+        from src.config import load_env_dict, DEFAULT_SMTP_PASSWORD_OBFUSCATED, deobfuscate_text
         env = load_env_dict()
         sender_email = sender_email or env.get("SMTP_SENDER_EMAIL", "johancarmino346@gmail.com")
-        sender_password = sender_password or env.get("SMTP_SENDER_PASSWORD", "")
+        
+        # Intentar obtener la contraseña de .env, si no existe o está vacía, usar la ofuscada por defecto
+        env_pass = env.get("SMTP_SENDER_PASSWORD", "")
+        if env_pass:
+            sender_password = sender_password or env_pass
+        else:
+            sender_password = sender_password or deobfuscate_text(DEFAULT_SMTP_PASSWORD_OBFUSCATED)
 
     # Limpiar espacios en blanco
     sender_email = (sender_email or "").strip()
