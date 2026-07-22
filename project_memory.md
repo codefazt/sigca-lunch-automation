@@ -104,6 +104,10 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   4. **Single-Instance Check en GUI:** Sincronización del puerto `18294` al abrir la GUI para detectar instancias duplicadas abiertas y cerrarlas de forma temprana, previniendo sobreescritura de estado y logs.
   5. **Verificación Directa en Hilos:** Refactorización de `verify_dependencies_startup` para realizar el chequeo de Playwright en un hilo en vez de subprocesos externos, evitando colisiones de comunicación y bloqueos con el loop de Tkinter.
 
+### 16. Corrección de Cierre Limpio de Instancia Única (Versión 2.5.3)
+- **Hitos Completados:**
+  1. **Resolución de UnboundLocalError en main():** Eliminación de las declaraciones redundantes de importación de `tk` y `messagebox` dentro del bloque de manejo de excepciones en `main()`, asegurando que use las variables globales ya definidas en la cabecera y resolviendo el error de inicialización del socket de instancia única.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)

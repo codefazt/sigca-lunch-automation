@@ -2742,8 +2742,6 @@ def main():
         _gui_single_instance_socket.bind(("127.0.0.1", 18294)) # Usamos 18294 exclusivo para la GUI
     except socket.error:
         # El puerto ya está en uso, significa que ya hay otra GUI abierta
-        import tkinter as tk
-        from tkinter import messagebox
         root = tk.Tk()
         root.withdraw()
         messagebox.showwarning(
