@@ -118,6 +118,11 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   2. **Maquetación HTML & Evidencia Adjunta:** Formateo de plantillas HTML oscuras estilizadas para correos de éxito, error y cancelación, adjuntando la captura de pantalla `.png` como evidencia.
   3. **Integración en Motor y GUI:** Incorporación de variables `SMTP_SENDER_EMAIL` y `SMTP_SENDER_PASSWORD` en `.env` y en la pestaña de Configuración de la GUI, incluyendo un botón para "Probar Correo".
 
+### 19. Activación y Prueba Exitosa de Credenciales SMTP (Versión 2.6.1)
+- **Hitos Completados:**
+  1. **Configuración de Contraseña de Aplicación:** Integración de las credenciales activas del remitente `johancarmino346@gmail.com` con la contraseña de aplicación autorizada por Google en `.env`.
+  2. **Verificación de Comunicación SMTP:** Confirmación del despacho directo y recepción del correo de prueba maquetado en HTML hacia el correo corporativo `johan.carmino@ex-cle.com`.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
