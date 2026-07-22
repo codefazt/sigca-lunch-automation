@@ -123,6 +123,12 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   1. **Configuración de Contraseña de Aplicación:** Integración de las credenciales activas del remitente `johancarmino346@gmail.com` con la contraseña de aplicación autorizada por Google en `.env`.
   2. **Verificación de Comunicación SMTP:** Confirmación del despacho directo y recepción del correo de prueba maquetado en HTML hacia el correo corporativo `johan.carmino@ex-cle.com`.
 
+### 20. Ocultamiento de Credenciales y Remitente de Solo Lectura en GUI (Versión 2.6.2)
+- **Hitos Completados:**
+  1. **Remitente Oficial en Modo Solo Lectura:** El campo del correo remitente (`johancarmino346@gmail.com`) en la GUI fue configurado en modo `disabled`/read-only para prevenir alteraciones accidentales por parte de los usuarios finales.
+  2. **Protección y Ocultamiento de Contraseña:** Se eliminó la caja de texto de la contraseña de aplicación de la interfaz gráfica, protegiéndola exclusivamente en el archivo `.env`.
+  3. **Comportamiento Opcional y Cobertura Total:** Confirmado que si las credenciales SMTP no están presentes, el bot omite silenciosamente la notificación por correo (igual que Telegram) en todos los escenarios (Simulación/Dry-Run, Automatización Horaria, Solicitud Manual y Cancelación) enviando reportes maquetados para éxito y error.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)

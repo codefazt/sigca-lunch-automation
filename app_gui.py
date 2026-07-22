@@ -1501,16 +1501,12 @@ class AppGUI:
         title_email = tk.Label(group_email, text="CONFIGURACIÓN DE NOTIFICACIONES POR CORREO (SMTP GMAIL)", font=("Segoe UI", 8, "bold"), bg=BG_CARD, fg=ACCENT)
         title_email.grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 5))
 
-        tk.Label(group_email, text="Correo Remitente (Gmail):", bg=BG_CARD, fg=FG_TEXT).grid(row=1, column=0, sticky="w", padx=15, pady=6)
-        self.smtp_user_ent = tk.Entry(group_email, bg=BG_INPUT, fg=FG_TEXT, bd=0, width=50, insertbackground=FG_TEXT)
-        self.smtp_user_ent.grid(row=1, column=1, columnspan=2, sticky="ew", padx=(0, 15), pady=6, ipady=3)
-
-        tk.Label(group_email, text="Contraseña de Aplicación:", bg=BG_CARD, fg=FG_TEXT).grid(row=2, column=0, sticky="w", padx=15, pady=6)
-        self.smtp_pass_ent = tk.Entry(group_email, bg=BG_INPUT, fg=FG_TEXT, bd=0, show="*", width=35, insertbackground=FG_TEXT)
-        self.smtp_pass_ent.grid(row=2, column=1, sticky="w", pady=6, ipady=3)
+        tk.Label(group_email, text="Correo Remitente (Oficial):", bg=BG_CARD, fg=FG_TEXT).grid(row=1, column=0, sticky="w", padx=15, pady=6)
+        self.smtp_user_ent = tk.Entry(group_email, bg=BG_CARD, fg=FG_MUTED, bd=0, width=40, insertbackground=FG_TEXT)
+        self.smtp_user_ent.grid(row=1, column=1, sticky="w", pady=6, ipady=3)
 
         self.email_test_btn = tk.Button(group_email, text="Probar Correo", font=("Segoe UI", 9, "bold"), command=self.test_email_connection)
-        self.email_test_btn.grid(row=2, column=2, sticky="e", padx=(5, 15), pady=6, ipady=2)
+        self.email_test_btn.grid(row=1, column=2, sticky="e", padx=(5, 15), pady=6, ipady=2)
         self.style_button(self.email_test_btn, "primary")
         group_email.columnconfigure(1, weight=1)
 
@@ -1835,8 +1831,18 @@ class AppGUI:
         self.pass_ent.insert(0, env.get("SIGCA_PASSWORDS", ""))
         self.tg_token_ent.insert(0, env.get("TELEGRAM_TOKEN", ""))
         self.tg_chat_ent.insert(0, env.get("TELEGRAM_CHAT_ID", ""))
+    def load_settings_into_inputs(self):
+        env = load_env_dict()
+        self.url_ent.insert(0, env.get("SIGCA_URL", "https://sigca.ex-cle.com/"))
+        self.user_ent.insert(0, env.get("SIGCA_USER", ""))
+        self.pass_ent.insert(0, env.get("SIGCA_PASSWORDS", ""))
+        self.tg_token_ent.insert(0, env.get("TELEGRAM_TOKEN", ""))
+        self.tg_chat_ent.insert(0, env.get("TELEGRAM_CHAT_ID", ""))
+        
+        self.smtp_user_ent.configure(state="normal")
+        self.smtp_user_ent.delete(0, tk.END)
         self.smtp_user_ent.insert(0, env.get("SMTP_SENDER_EMAIL", "johancarmino346@gmail.com"))
-        self.smtp_pass_ent.insert(0, env.get("SMTP_SENDER_PASSWORD", ""))
+        self.smtp_user_ent.configure(state="disabled")
 
         config = load_config()
         self.menu_cb.set(config.get("prefer_menu", "saludable").capitalize())
@@ -1895,8 +1901,6 @@ class AppGUI:
         passwords = self.pass_ent.get().strip()
         tg_token = self.tg_token_ent.get().strip()
         tg_chat = self.tg_chat_ent.get().strip()
-        smtp_user = self.smtp_user_ent.get().strip()
-        smtp_pass = self.smtp_pass_ent.get().strip()
 
         if not url or not user or not passwords:
             self.hide_loading()
@@ -1904,15 +1908,20 @@ class AppGUI:
             logger.error("Error al guardar: faltan campos obligatorios de SiGCA.")
             return
 
-        save_env_values({
+        env = load_env_dict()
+        env_updates = {
             "SIGCA_URL": url,
             "SIGCA_USER": user,
             "SIGCA_PASSWORDS": passwords,
             "TELEGRAM_TOKEN": tg_token,
-            "TELEGRAM_CHAT_ID": tg_chat,
-            "SMTP_SENDER_EMAIL": smtp_user,
-            "SMTP_SENDER_PASSWORD": smtp_pass
-        })
+            "TELEGRAM_CHAT_ID": tg_chat
+        }
+        if "SMTP_SENDER_EMAIL" in env:
+            env_updates["SMTP_SENDER_EMAIL"] = env["SMTP_SENDER_EMAIL"]
+        if "SMTP_SENDER_PASSWORD" in env:
+            env_updates["SMTP_SENDER_PASSWORD"] = env["SMTP_SENDER_PASSWORD"]
+
+        save_env_values(env_updates)
 
         config = load_config()
         config["prefer_menu"] = self.menu_cb.get().lower()
@@ -1979,12 +1988,13 @@ class AppGUI:
             show_custom_error("Error de Envío", "No se pudo conectar con Telegram. Revisa el token, el Chat ID o la conexión a internet.")
 
     def test_email_connection(self):
-        smtp_user = self.smtp_user_ent.get().strip()
-        smtp_pass = self.smtp_pass_ent.get().strip()
+        env = load_env_dict()
+        smtp_user = env.get("SMTP_SENDER_EMAIL", "johancarmino346@gmail.com")
+        smtp_pass = env.get("SMTP_SENDER_PASSWORD", "")
         dest_email = self.user_ent.get().strip()
 
         if not smtp_user or not smtp_pass:
-            show_custom_warning("Faltan Credenciales", "Por favor ingresa el Correo Remitente y la Contraseña de Aplicación de Gmail.")
+            show_custom_warning("Faltan Credenciales", "No se encontraron credenciales SMTP (SMTP_SENDER_EMAIL / SMTP_SENDER_PASSWORD) en el archivo .env.")
             return
 
         if not dest_email:
