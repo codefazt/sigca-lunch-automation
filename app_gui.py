@@ -298,7 +298,64 @@ def _update_gui_status_badge_sync():
 # Cuadros de diálogo Premium
 # ---------------------------------------------------------------------------
 
-class PremiumMessageBox(tk.Toplevel):
+class ToplevelFollowParent(tk.Toplevel):
+    """Clase base para ventanas Toplevel que siguen el estado de visibilidad del padre (minimizar/restaurar)."""
+
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+        self._parent_unmap_id = None
+        self._parent_map_id = None
+        self._bind_parent_visibility()
+
+    def _bind_parent_visibility(self):
+        parent = self.master
+        if parent:
+            self._parent_unmap_id = parent.bind("<Unmap>", self._on_parent_unmap, add="+")
+            self._parent_map_id = parent.bind("<Map>", self._on_parent_map, add="+")
+
+    def _on_parent_unmap(self, event):
+        if str(event.widget) == str(self.master):
+            try:
+                if self.winfo_exists():
+                    self.withdraw()
+            except Exception:
+                pass
+
+    def _on_parent_map(self, event):
+        if str(event.widget) == str(self.master):
+            try:
+                if self.winfo_exists():
+                    self.deiconify()
+                    self.lift()
+            except Exception:
+                pass
+
+    def _unbind_parent_visibility(self):
+        parent = self.master
+        if parent:
+            try:
+                if hasattr(self, "_parent_unmap_id") and self._parent_unmap_id:
+                    parent.unbind("<Unmap>", self._parent_unmap_id)
+                if hasattr(self, "_parent_map_id") and self._parent_map_id:
+                    parent.unbind("<Map>", self._parent_map_id)
+            except Exception:
+                pass
+
+    def destroy(self):
+        self._unbind_parent_visibility()
+        try:
+            self.grab_release()
+        except Exception:
+            pass
+        if self.master:
+            try:
+                self.master.focus_set()
+            except Exception:
+                pass
+        super().destroy()
+
+
+class PremiumMessageBox(ToplevelFollowParent):
     """Ventana modal personalizada con estilo premium oscuro."""
 
     def __init__(self, parent, title, message, alert_type="info"):
@@ -524,7 +581,7 @@ def show_custom_warning(title, message):
         messagebox.showwarning(title, message)
 
 
-class PremiumConfirmBox(tk.Toplevel):
+class PremiumConfirmBox(ToplevelFollowParent):
     """Ventana modal de confirmación personalizada con estilo premium oscuro."""
 
     def __init__(self, parent, title, message):
@@ -673,7 +730,7 @@ def show_custom_confirm(title, message):
         return messagebox.askyesno(title, message)
 
 
-class PremiumUpdatePopup(tk.Toplevel):
+class PremiumUpdatePopup(ToplevelFollowParent):
     """Pequeño popup no intrusivo en la esquina inferior derecha para notificar actualizaciones."""
     def __init__(self, parent, version, on_open_details):
         super().__init__(parent)
@@ -735,7 +792,7 @@ class PremiumUpdatePopup(tk.Toplevel):
         return f"#{darkened[0]:02x}{darkened[1]:02x}{darkened[2]:02x}"
 
 
-class PremiumUpdateConfirmBox(tk.Toplevel):
+class PremiumUpdateConfirmBox(ToplevelFollowParent):
     """Ventana modal premium para confirmar actualización, mostrando notas de release."""
     def __init__(self, parent, version, notes):
         super().__init__(parent)
@@ -873,7 +930,7 @@ class PremiumUpdateConfirmBox(tk.Toplevel):
         return f"#{darkened[0]:02x}{darkened[1]:02x}{darkened[2]:02x}"
 
 
-class PremiumDownloadProgressBox(tk.Toplevel):
+class PremiumDownloadProgressBox(ToplevelFollowParent):
     """Ventana modal premium que muestra la barra de progreso de descarga."""
     def __init__(self, parent, download_url, on_success):
         super().__init__(parent)
@@ -882,6 +939,7 @@ class PremiumDownloadProgressBox(tk.Toplevel):
         self.resizable(False, False)
         self.transient(parent)
         self.withdraw()
+        self.overrideredirect(True)
 
         # Deshabilitar el botón cerrar de la barra de título nativa para evitar cierres corruptos de descarga
         self.protocol("WM_DELETE_WINDOW", lambda: None)
@@ -2068,10 +2126,10 @@ class AppGUI:
             try:
                 from src.cleanup import clean_all_logs_and_evidence
                 deleted = clean_all_logs_and_evidence()
-                messagebox.showinfo("Limpieza Completada", f"Se han eliminado {deleted} archivos antiguos con éxito.")
+                show_custom_success("Limpieza Completada", f"Se han eliminado {deleted} archivos antiguos con éxito.")
             except Exception as e:
                 logger.error(f"Error en limpieza manual: {e}")
-                messagebox.showerror("Error", f"Ocurrió un error al intentar limpiar los registros:\n{e}")
+                show_custom_error("Error", f"Ocurrió un error al intentar limpiar los registros:\n{e}")
 
     def toggle_cancelled_manually(self):
         val = self.cancelled_var.get()
@@ -2439,7 +2497,7 @@ class AppGUI:
 
     def _show_environment_repair_dialog(self, title, message, show_install_chromium=True, show_vcredist=True):
         """Muestra un diálogo premium con botones de acción para reparar el entorno."""
-        dialog = tk.Toplevel(self.root)
+        dialog = ToplevelFollowParent(self.root)
         dialog.title(title)
         dialog.configure(bg=BG_CARD)
         dialog.resizable(False, False)
@@ -2833,11 +2891,13 @@ def main():
         # El puerto ya está en uso, significa que ya hay otra GUI abierta
         root = tk.Tk()
         root.withdraw()
-        messagebox.showwarning(
+        dialog = PremiumMessageBox(
+            root,
             "SiGCABot Activo",
-            "Ya hay una instancia de SiGCABot ejecutándose en tu sistema.\n\n"
-            "Por favor, revisa el área de notificaciones (System Tray) al lado de tu reloj."
+            "Ya hay una instancia de SiGCABot ejecutándose en tu sistema.\n\nPor favor, revisa el área de notificaciones (System Tray) al lado de tu reloj.",
+            "warning"
         )
+        root.wait_window(dialog)
         sys.exit(0)
 
     # Levantar servicios en hilos secundarios
