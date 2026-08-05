@@ -157,6 +157,11 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
 - Se añadió un bloqueo compartido entre procesos, escritura atómica de `status.json` y clasificación de resultados para no guardar como éxito una solicitud no confirmada.
 - Se eliminó el fallback SMTP embebido. Sin `SMTP_SENDER_PASSWORD` configurada, el correo se omite de forma segura.
 
+### 26. Corrección de Auto-Inicio (Versión 2.6.7)
+- Se corrigió el doble lanzamiento causado por mantener activos simultáneamente el Registro de Windows y el acceso directo de Startup.
+- En desarrollo, el auto-inicio utiliza `pythonw.exe` para evitar consolas visibles durante el logon.
+- El acceso directo de Startup queda reservado como fallback cuando el Registro no puede configurarse.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)

@@ -17,7 +17,7 @@ import base64
 logger = logging.getLogger("SiGCABot")
 
 # Versión global de la aplicación
-APP_VERSION = "2.6.6"
+APP_VERSION = "2.6.7"
 
 # ---------------------------------------------------------------------------
 # Ofuscación / Encriptación simple de campos sensibles
@@ -432,8 +432,18 @@ def save_env_values(values):
         f.writelines(new_lines)
 
 # ---------------------------------------------------------------------------
-# Auto-inicio con Windows (Registro HKCU + Carpeta Startup + Auto-Healing)
+# Auto-inicio con Windows (Registro HKCU + fallback Startup + Auto-Healing)
 # ---------------------------------------------------------------------------
+
+def _get_startup_python_executable():
+    """Retorna un ejecutable de Python sin consola para el auto-inicio en desarrollo."""
+    py_exe = os.path.abspath(sys.executable)
+    if getattr(sys, 'frozen', False):
+        return py_exe
+
+    pythonw_path = os.path.join(os.path.dirname(py_exe), "pythonw.exe")
+    return pythonw_path if os.path.exists(pythonw_path) else py_exe
+
 
 def get_expected_startup_command():
     """Retorna la cadena exacta del comando que debe registrarse en el Auto-Inicio de Windows."""
@@ -442,7 +452,7 @@ def get_expected_startup_command():
         return f'"{exe_path}"'
     else:
         script_path = os.path.join(BASE_DIR, "app_gui.py")
-        py_exe = os.path.abspath(sys.executable)
+        py_exe = _get_startup_python_executable()
         return f'"{py_exe}" "{script_path}"'
 
 
@@ -474,7 +484,7 @@ def sync_startup_shortcut(enabled):
                 args = ""
                 work_dir = os.path.dirname(target)
             else:
-                target = os.path.abspath(sys.executable)
+                target = _get_startup_python_executable()
                 script_path = os.path.join(BASE_DIR, "app_gui.py")
                 args = f'"{script_path}"'
                 work_dir = BASE_DIR
@@ -524,9 +534,9 @@ def set_startup(enabled):
     key_name = "SiGCALunchBot"
     expected_cmd = get_expected_startup_command()
 
-    success = False
+    registry_success = False
     try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+        key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
         if enabled:
             winreg.SetValueEx(key, key_name, 0, winreg.REG_SZ, expected_cmd)
             logger.info(f"Auto-inicio registrado exitosamente en Registro de Windows: {expected_cmd}")
@@ -537,13 +547,21 @@ def set_startup(enabled):
             except FileNotFoundError:
                 pass
         winreg.CloseKey(key)
-        success = True
+        registry_success = True
     except Exception as e:
         logger.error(f"Error al configurar inicio en Registro de Windows: {e}")
 
-    # Sincronizar también en la carpeta Startup como respaldo
-    sync_startup_shortcut(enabled)
-    return success
+    # Mantener un solo mecanismo activo para evitar dos lanzamientos al iniciar.
+    # La carpeta Startup solo se usa si el Registro no pudo configurarse.
+    if enabled:
+        if registry_success:
+            sync_startup_shortcut(False)
+        else:
+            sync_startup_shortcut(True)
+    else:
+        sync_startup_shortcut(False)
+
+    return registry_success
 
 
 def check_and_repair_startup():
@@ -579,8 +597,9 @@ def check_and_repair_startup():
                 set_startup(True)
                 return True
             else:
-                # Asegurar que el acceso directo de respaldo en Startup también exista
-                sync_startup_shortcut(True)
+                # El Registro es el mecanismo principal; eliminar el fallback
+                # para evitar dos lanzamientos simultáneos durante el logon.
+                sync_startup_shortcut(False)
         else:
             # Si debe estar desactivado pero la clave o acceso directo existen, limpiarlos
             if current_val is not None:

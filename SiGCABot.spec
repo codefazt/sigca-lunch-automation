@@ -30,6 +30,7 @@ a = Analysis(
         'src.state',
         'src.notifications',
         'src.bot_engine',
+        'src.job_lock',
         'src.health_server',
         'src.telegram_poller',
         'src.scheduler',
