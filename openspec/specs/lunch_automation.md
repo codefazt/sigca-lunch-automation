@@ -21,6 +21,7 @@ Este documento describe la especificación técnica y funcional permanente para 
     *   Debe rellenar secuencialmente el correo del usuario (`SIGCA_USER`) y la contraseña.
     *   En caso de fallo en el inicio de sesión, debe reintentar con las contraseñas alternativas configuradas en `SIGCA_PASSWORDS` (separadas por comas).
     *   Debe responder afirmativamente/omitir el diálogo de Microsoft "¿Mantener la sesión iniciada?".
+    *   Los fallos de autenticación deben registrarse y notificarse sin cambiar `is_active`; el usuario es el único que puede desactivar el bot desde la GUI.
 
 3.  **Comprobación de Estado Previo:**
     *   Una vez dentro del módulo "Almuerzo", el bot debe validar si ya existe una solicitud registrada para el día (buscando textos como `"Solicitud registrada"` o `"Has realizado tu solicitud"`).
@@ -43,6 +44,7 @@ Este documento describe la especificación técnica y funcional permanente para 
 6.  **Envío del Formulario:**
     *   Debe hacer clic en el botón de confirmación (`"Solicitar"`, `"Pedir Almuerzo"`, `"Enviar"`, etc.).
     *   Debe capturar una captura de pantalla final como evidencia física del pedido exitoso.
+    *   Si el mensaje posterior al envío no se confirma, el resultado debe tratarse como no confirmado y no como éxito.
 
 ---
 
@@ -66,6 +68,7 @@ SIGCA_URL=https://sigca.ex-cle.com/
   "headless": true,
   "retries": 3,
   "retry_delay_sec": 300,
+  "retry_attempt_delay_sec": 5,
   "prefer_menu": "saludable"
 }
 ```
@@ -75,7 +78,7 @@ SIGCA_URL=https://sigca.ex-cle.com/
 ## 3. Arquitectura del Job y Programador de Tareas
 
 El script se ejecuta diariamente bajo la utilidad del Programador de Tareas de Windows:
-*   **Archivo ejecutor:** `run_job.bat` (Encargado de inicializar el entorno `venv`, verificar dependencias y arrancar `lunch_bot.py`).
-*   **Programación:** Todos los días a las **4:30 PM** de forma invisible en segundo plano.
+*   **Archivo ejecutor:** `run_job.bat` (Encargado de inicializar el entorno `venv`, verificar dependencias y arrancar `app_gui.py --run-job`, que valida y persiste `status.json`).
+*   **Programación:** Todos los días a la hora de inicio configurada, de forma invisible en segundo plano.
 *   **Logs históricos:** Guardados en `logs/lunch_automation.log`.
 *   **Capturas de pantalla de evidencia:** Guardadas con marca de tiempo en `evidence/`.

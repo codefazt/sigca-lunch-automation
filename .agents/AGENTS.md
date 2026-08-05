@@ -7,7 +7,7 @@ Este archivo centraliza las reglas, directrices de desarrollo, arquitectura y bu
 1. **Robustez y Tolerancia a Fallos:** La aplicación ejecuta automatizaciones web complejas interactuando con sistemas corporativos propensos a cambios y lentitud (Microsoft SSO, formularios web). Cada acción de Playwright debe estar protegida contra excepciones y timeouts.
 2. **Interfaz Premium y Fluida (No-Blocking GUI):** La interfaz Tkinter nunca debe bloquearse. Toda tarea de automatización, red o temporizador pesado debe ejecutarse en un hilo secundario y comunicarse con el hilo de la interfaz mediante callbacks seguros y la cola `.after()` de Tkinter.
 3. **Cumplimiento con Windows:** La aplicación debe integrarse de forma nativa y limpia con Windows (Registro de inicio, Programador de Tareas, System Tray con `pystray`, y Notificaciones Toast nativas).
-4. **Seguridad y Privacidad:** Las credenciales nunca se guardan en el código ni en el repositorio. Se cargan y guardan en el archivo `.env`. Si una autenticación falla repetidamente, el bot debe desactivarse automáticamente para evitar el bloqueo de cuentas corporativas.
+4. **Seguridad y Privacidad:** Las credenciales nunca se guardan en el código ni en el repositorio. Se cargan y guardan en el archivo `.env`. Los fallos de autenticación deben generar logs y notificaciones, pero nunca desactivar el bot automáticamente. La desactivación solo puede realizarse manualmente desde la GUI.
 
 ---
 
@@ -52,5 +52,4 @@ El proyecto se divide en el script principal de entrada y un paquete de módulos
 ### 4. Flujo de Compilación y Releases en GitHub
 - Las nuevas versiones de distribución del bot deben empaquetarse mediante `.\build.bat --package` y publicarse formalmente como un "Release" en GitHub.
 - Los agentes AI deben conocer y hacer referencia al skill local [git_release](file:///c:/Users/Administrador/Desktop/python/solicitud_almuerzo_auto/.agents/skills/git_release/SKILL.md) para estructurar comandos de publicación limpios con `gh release create`.
-
 

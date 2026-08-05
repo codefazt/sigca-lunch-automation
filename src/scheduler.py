@@ -147,7 +147,10 @@ def start_scheduler(gui_update_callback=None):
                         if is_first_check:
                             logger.info(f"El almuerzo objetivo es para el {target_day_name} ({target_date_str}), marcado como día libre/remoto. Omitiendo solicitud.")
                     else:
-                        retry_delay = config.get("retry_delay_sec", 300)
+                        try:
+                            retry_delay = max(0, int(config.get("retry_delay_sec", 300)))
+                        except (TypeError, ValueError):
+                            retry_delay = 300
 
                         # Comprobar cuándo fue la última ejecución (para delay de reintentos)
                         last_run_str = status_info.get("last_run_timestamp", "")
@@ -255,7 +258,7 @@ def register_windows_task(trigger_hour=16, trigger_minute=30):
             f"    $trigger = New-ScheduledTaskTrigger -Daily -At '{trigger_time}';\r\n"
             f"    $tempTrigger = New-ScheduledTaskTrigger -Once -At '{trigger_time}' -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Hours 18);\r\n"
             f"    $trigger.Repetition = $tempTrigger.Repetition;\r\n"
-            f"    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 10);\r\n"
+            f"    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 0;\r\n"
             f"    Register-ScheduledTask -TaskName '{TASK_NAME}' -Trigger $trigger -Action $action -Settings $settings "
             f"-Description 'Job automatico diario para solicitar almuerzo en SiGCA' -Force;\r\n"
             "} catch {\r\n"

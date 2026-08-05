@@ -7,13 +7,22 @@ from unittest.mock import patch, MagicMock
 # Importar la clase LunchBot
 # Usamos try/except para evitar fallas si lunch_bot aún no está completamente implementado (TDD estricto)
 try:
-    from src.bot_engine import LunchBot
+    from src.bot_engine import LunchBot, is_confirmed_order_result
 except ImportError:
     LunchBot = None
+    is_confirmed_order_result = None
 
 
 def test_lunch_bot_class_exists():
     assert LunchBot is not None, "La clase LunchBot debe existir en src/bot_engine.py"
+
+
+def test_confirmed_order_result_classification():
+    assert is_confirmed_order_result(0, "Solicitud exitosa: Solicitud confirmada.") is True
+    assert is_confirmed_order_result(0, "El almuerzo ya ha sido solicitado para hoy/mañana.") is True
+    assert is_confirmed_order_result(0, "Fuera de horario de ejecución.") is False
+    assert is_confirmed_order_result(0, "No se detectó el mensaje de éxito después de enviar.") is False
+    assert is_confirmed_order_result(0, "[DRY RUN] Simulación completada.", dry_run=True) is False
 
 
 @pytest.fixture
@@ -269,3 +278,14 @@ def test_check_and_repair_startup_runs_without_crash(tmp_path):
         res = check_and_repair_startup()
         assert isinstance(res, bool)
 
+
+def test_save_status_writes_valid_json(tmp_path):
+    from src.config import save_status
+
+    status_file = tmp_path / "status.json"
+    data = {"is_active": True, "last_run_status": "success"}
+
+    with patch("src.config.STATUS_PATH", str(status_file)):
+        save_status(data)
+
+    assert json.loads(status_file.read_text(encoding="utf-8")) == data

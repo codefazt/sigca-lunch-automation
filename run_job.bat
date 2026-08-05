@@ -21,9 +21,13 @@ if not exist "venv" (
     call venv\Scripts\activate
 )
 
-:: Ejecutar el script del bot de almuerzo
+:: Ejecutar el entrypoint CLI seguro. Este flujo consulta y actualiza status.json.
 :: Nota: pasamos los argumentos recibidos al batch script (ej. --dry-run o --force-time)
-python lunch_bot.py %*
+if /I "%~1"=="--cancel-order" (
+    python app_gui.py --cancel-order %~2 %~3 %~4 %~5 %~6 %~7 %~8 %~9
+) else (
+    python app_gui.py --run-job %*
+)
 
 echo ===================================================
 echo [SIGCA LUNCH AUTOMATION] Ejecucion finalizada con codigo: %errorlevel%

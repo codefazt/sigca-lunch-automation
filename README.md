@@ -11,7 +11,7 @@ El proyecto combina un potente script motor de automatización web con una elega
 *   **Interfaz Gráfica Premium (Dark Mode):** Panel de control moderno basado en la paleta de colores *Hextech Client (LoL)* oscuro. Cuenta con pestañas de configuración, cuestionario, visualizador de registros (consola de logs) y panel de monitoreo con manual de uso integrado vía web.
 *   **Automatización Web Inteligente (Playwright):** Automatiza el inicio de sesión del SSO (Single Sign-On) corporativo de Microsoft, navega a la sección de pedidos, selecciona el menú preferido (Saludable o Estándar), autocompleta encuestas/formularios adicionales opcionales y confirma la solicitud.
 *   **Cuestionario Dinámico Configurable:** Permite definir desde la interfaz (Sede, Evaluación, Comentarios y opciones específicas del plato) las respuestas predeterminadas que el bot usará para rellenar los formularios adicionales, inyectándolas en tiempo de ejecución.
-*   **Integración con el Programador de Tareas de Windows:** Registra y elimina tareas programadas directamente desde la GUI con elevación UAC automática. Configura la tarea con repetición horaria periódica (cada 1 hora durante 18 horas) para garantizar el reintento automático ante suspensiones, apagados o fallos de red. Detecta dinámicamente la ruta del ejecutable.
+*   **Integración con el Programador de Tareas de Windows:** Registra y elimina tareas programadas directamente desde la GUI con elevación UAC automática. Configura la tarea con repetición horaria periódica (cada 1 hora durante 18 horas) para garantizar el reintento automático ante suspensiones, apagados o fallos de red. La ruta de código fuente delega en `app_gui.py --run-job`, que valida y persiste `status.json`.
 *   **Control de Duplicados & Seguridad:** Inspecciona dinámicamente la página web para detectar si la solicitud ya fue registrada previamente, deteniendo la operación automáticamente para evitar duplicaciones.
 *   **Bandeja del Sistema (System Tray):** Minimiza la ventana a la barra de tareas de Windows (icono de bandeja de sistema) para operar en segundo plano sin ocupar espacio.
 *   **Notificaciones Windows Toast:** Alertas nativas integradas de Windows 10/11 para notificar éxitos o fallos inmediatamente en el escritorio.
@@ -21,6 +21,7 @@ El proyecto combina un potente script motor de automatización web con una elega
 *   **Servidor Web de Monitoreo (Health Check Local):**
     *   Expone una API JSON en `http://127.0.0.1:18293/health` para telemetría.
     *   Expone un Dashboard interactivo en `http://127.0.0.1:18293/` con logs en tiempo real, estado del servicio y previsualización de la última evidencia.
+*   **Control de Ejecución y Reintentos:** Usa un bloqueo entre procesos para evitar solicitudes simultáneas, reintentos configurables mediante `retries` y una espera interna configurable mediante `retry_attempt_delay_sec`. `retry_delay_sec` controla el cooldown del planificador.
 *   **Compilación Automatizada:** Script `build.bat` que empaqueta todo el proyecto en un ejecutable portable listo para distribución.
 
 ---
@@ -113,7 +114,7 @@ TELEGRAM_CHAT_ID=tu_telegram_chat_id
     ```
 *   **Ejecutar Motor de Almuerzo en Consola (Prueba en Seco/Dry-Run):**
     ```bash
-    # Ejecuta el flujo simulado forzando el rango horario actual
+    # CLI directo para pruebas de desarrollador
     python lunch_bot.py --dry-run --force-time
     ```
 *   **Ejecutar en Modo CLI desde la GUI (para Task Scheduler):**

@@ -18,6 +18,7 @@ logs/*
 !logs/.gitkeep
 evidence/*
 !evidence/.gitkeep
+.lunch_automation.lock
 
 # IDEs
 .vscode/

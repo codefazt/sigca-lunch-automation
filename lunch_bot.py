@@ -2,8 +2,9 @@
 SiGCABot — CLI (Interfaz de Línea de Comandos) para el motor de automatización.
 
 Este archivo es un wrapper fino para ejecutar el bot directamente desde la terminal
-sin necesidad de la interfaz gráfica. Útil para pruebas de desarrollador y
-ejecuciones programadas vía run_job.bat.
+sin necesidad de la interfaz gráfica. Útil para pruebas de desarrollador. La ruta
+programada por Windows utiliza el entrypoint seguro de app_gui.py mediante
+run_job.bat para aplicar validaciones y persistir status.json.
 
 Uso:
     python lunch_bot.py                  → Ejecuta el bot normalmente

@@ -9,7 +9,7 @@ Este archivo registra de forma histórica los avances, logros, fallos detectados
 Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito las siguientes capacidades:
 
 ### 1. Interfaz de Usuario Premium
-- Diseño en modo oscuro basado en la paleta de colores *Catppuccin*.
+- Diseño en modo oscuro basado en la paleta de colores *Hextech Client*.
 - Consola interactiva integrada que muestra logs en tiempo real mediante un handler de logging personalizado (`GUILogHandler`).
 - Pestañas organizadas para configurar credenciales corporativas, tokens de Telegram, horarios del planificador y preferencias del menú.
 - Integración en la bandeja del sistema (System Tray) con soporte para cerrar la interfaz manteniendo la ejecución en segundo plano y restaurar con doble clic.
@@ -44,7 +44,7 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
 
 ### 7. Directrices Estéticas para Notificaciones y Modales
 - **Prohibición de Ventanas Nativas:** Prohibido el uso de diálogos messagebox de Tkinter nativos (grises y asimétricos).
-- **Modales Premium Integrados:** Implementación del estilo Catppuccin para notificaciones internas de primer plano con un borde de `2px` que indica severidad (`ACCENT_BLUE` para información, `ACCENT_GREEN` para éxito, `ACCENT_YELLOW` para alertas, `ACCENT_RED` para errores) e interactividad con efectos hover dinámicos en los botones.
+- **Modales Premium Integrados:** Implementación del estilo Hextech Client para notificaciones internas de primer plano con un borde de `2px` que indica severidad (`ACCENT_BLUE` para información, `ACCENT_GREEN` para éxito, `ACCENT_YELLOW` para alertas, `ACCENT_RED` para errores) e interactividad con efectos hover dinámicos en los botones.
 - **Notificaciones Toast Windows:** Los Toasts se reservan para notificaciones en segundo plano, siempre envueltos en bloques robustos de excepciones.
 
 ### 8. Optimizaciones, Seguridad y Cuestionario Dinámico
@@ -151,6 +151,12 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
   1. **Credenciales Embebidas:** Se ofuscó e integró la contraseña de aplicación de Gmail directamente en el código fuente. Esto soluciona el problema de los usuarios que instalan la aplicación de forma limpia usando el archivo `.env.template` (el cual, por razones de seguridad, no incluye contraseñas).
   2. **Transparencia para el Usuario Final:** La GUI y el motor de notificaciones ahora tienen un mecanismo de respaldo (*fallback*) robusto. Si `.env` no tiene la contraseña SMTP, el sistema lee la credencial embebida ofuscada, permitiendo probar y enviar correos instantáneamente sin necesidad de configuraciones manuales o alertas de "Faltan Credenciales".
 
+### 25. Ejecución Segura y Estado Manual (Versión 2.6.6)
+- La tarea de código fuente delega en `app_gui.py --run-job`, manteniendo las mismas validaciones y persistencia que el ejecutable compilado.
+- Los errores de autenticación, red o navegador se notifican y registran, pero nunca desactivan automáticamente el bot. La desactivación solo se realiza desde el botón manual de la GUI.
+- Se añadió un bloqueo compartido entre procesos, escritura atómica de `status.json` y clasificación de resultados para no guardar como éxito una solicitud no confirmada.
+- Se eliminó el fallback SMTP embebido. Sin `SMTP_SENDER_PASSWORD` configurada, el correo se omite de forma segura.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)
@@ -217,5 +223,3 @@ A continuación, se detallan los fallos históricos encontrados en el desarrollo
 ### 14. Fallo de Conexión del Driver de Playwright (`Connection closed while reading from driver`) en el Subproceso del GUI
 * **Fallo:** Al iniciar la app, el subproceso de diagnóstico `--check-deps` fallaba bajo ciertas condiciones de red o cuando se heredaban variables de entorno de la GUI. Esto lanzaba un error del `PlaywrightContextManager` al inicializar el canal IPC de Node.js, provocando la aparición de la falsa modal emergente de "Navegador no encontrado" a pesar de que las dependencias estaban instaladas correctamente.
 * **Solución:** Se refactorizó la verificación inicial de dependencias para ejecutarse directamente en un hilo de Python secundario (`check_deps_thread`) dentro del mismo proceso de la GUI en lugar de iniciar un subproceso Python secundario mediante la consola de comandos. Esto previene colisiones IPC de Windows, agiliza el tiempo de arranque de la GUI a la mitad y captura las excepciones de forma nativa.
-
-

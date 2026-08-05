@@ -51,7 +51,7 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
     # Importar módulos de infraestructura
     from src.config import BASE_DIR, load_status, save_status
     from src.logger import logger
-    from src.bot_engine import LunchBot
+    from src.bot_engine import LunchBot, is_confirmed_order_result
     from datetime import datetime
 
     if _args.check_deps:
@@ -123,18 +123,25 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
                 status_info = load_status()
                 status_info["last_run_timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 if exit_code == 0:
-                    status_info["last_run_status"] = "success"
-                    if not _args.dry_run:
+                    if _args.dry_run:
+                        status_info["last_run_status"] = "dry_run_success"
+                    elif is_confirmed_order_result(exit_code, msg, dry_run=False):
+                        status_info["last_run_status"] = "success"
                         status_info["last_successful_run"] = datetime.now().strftime("%Y-%m-%d")
                         # Guardar la fecha del almuerzo objetivo para el control del ciclo operativo
                         from src.config import get_target_lunch_date, load_config
                         _cli_cfg = load_config()
                         _tgt_date, _ = get_target_lunch_date(config=_cli_cfg)
                         status_info["last_successful_target_date"] = _tgt_date.strftime("%Y-%m-%d")
+                    else:
+                        status_info["last_run_status"] = "skipped"
                 else:
                     status_info["last_run_status"] = f"error (código {exit_code})"
                     if exit_code == 1:
-                        status_info["is_active"] = False  # Desactivar si falla contraseña para evitar bloqueo
+                        logger.warning(
+                            "Falló la autenticación, pero el bot permanecerá activo. "
+                            "La desactivación solo se realiza manualmente desde la GUI."
+                        )
                 save_status(status_info)
             except Exception as se:
                 logger.error(f"No se pudo guardar el estado en status.json: {se}")
@@ -274,6 +281,8 @@ def _update_gui_status_badge_sync():
             status_color = ACCENT_GREEN
         elif raw_status and (raw_status.startswith("error") or raw_status.startswith("cancelado")):
             status_color = ACCENT_RED
+        elif raw_status in ("skipped", "dry_run_success"):
+            status_color = ACCENT_YELLOW
         else:
             status_color = FG_MUTED
         app.last_status_lbl.configure(text=f"Resultado: {display_status}", fg=status_color)
@@ -2050,10 +2059,6 @@ class AppGUI:
         smtp_user = env.get("SMTP_SENDER_EMAIL", "johancarmino346@gmail.com")
         smtp_pass = env.get("SMTP_SENDER_PASSWORD", "")
         
-        if not smtp_pass:
-            from src.config import DEFAULT_SMTP_PASSWORD_OBFUSCATED, deobfuscate_text
-            smtp_pass = deobfuscate_text(DEFAULT_SMTP_PASSWORD_OBFUSCATED)
-
         dest_email = self.user_ent.get().strip()
 
         if not smtp_user or not smtp_pass:
@@ -2536,13 +2541,13 @@ class AppGUI:
         btn_frame.pack(fill=tk.X, pady=(0, 5))
 
         def make_btn(parent, text, color, command):
-            btn = tk.Button(parent, text=text, font=("Segoe UI", 10, "bold"), bg=color, fg="#1e1e2e",
-                            activebackground=color, activeforeground="#1e1e2e", relief=tk.FLAT,
+            btn = tk.Button(parent, text=text, font=("Segoe UI", 10, "bold"), bg=color, fg="#010a13",
+                            activebackground=color, activeforeground="#010a13", relief=tk.FLAT,
                             cursor="hand2", padx=12, pady=6, command=command)
             btn.pack(side=tk.LEFT, padx=4, expand=True, fill=tk.X)
             # Hover
             btn.bind("<Enter>", lambda e: btn.configure(bg=FG_TEXT, fg=BG_MAIN))
-            btn.bind("<Leave>", lambda e: btn.configure(bg=color, fg="#1e1e2e"))
+            btn.bind("<Leave>", lambda e: btn.configure(bg=color, fg="#010a13"))
             return btn
 
         if show_install_chromium:
@@ -2702,14 +2707,22 @@ class AppGUI:
             self._finish_subprocess(ret_code, f"El proceso terminó con código {ret_code}")
             return
 
-        # Determinar el límite de tiempo dinámico según el tipo de operación
+        # Determinar el límite de tiempo según los reintentos configurados.
+        try:
+            config = load_config()
+            attempts = max(1, int(config.get("retries", 3)))
+            attempt_delay = max(0, int(config.get("retry_attempt_delay_sec", 5)))
+        except Exception:
+            attempts = 3
+            attempt_delay = 5
+
         timeout = 60  # Por defecto 1 minuto
         if self.subprocess_type == "manual":
-            timeout = 300  # 5 minutos para dar margen a los 3 intentos incrementales de solicitud
+            timeout = max(300, attempts * 120 + (attempts - 1) * attempt_delay)
         elif self.subprocess_type == "cancel":
-            timeout = 180  # 3 minutos para los 3 intentos incrementales de cancelación
+            timeout = max(180, attempts * 90 + (attempts - 1) * attempt_delay)
         elif self.subprocess_type == "dry_run":
-            timeout = 90   # 1.5 minutos para simulación (Dry Run)
+            timeout = max(90, attempts * 120 + (attempts - 1) * attempt_delay)
 
         # Verificar si se superó el tiempo límite
         elapsed = time.time() - self.subprocess_start_time

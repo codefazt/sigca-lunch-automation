@@ -27,19 +27,19 @@ El proyecto está diseñado bajo una arquitectura limpia y modular de tres capas
 
 ## 🎨 Guía de Estilo Visual (Dark Mode Premium)
 
-Toda modificación en los widgets de Tkinter debe respetar la paleta de colores premium inspirada en el tema *Catppuccin*:
+Toda modificación en los widgets de Tkinter debe respetar la paleta de colores premium estilo *Hextech Client (LoL)* definida en `src/config.py`:
 
 ```python
-BG_MAIN = "#1e1e2e"       # Fondo principal de ventanas
-BG_CARD = "#252538"       # Fondo de marcos/paneles internos y diálogos
-BG_INPUT = "#313244"      # Fondo de cajas de entrada de texto
-FG_TEXT = "#cdd6f4"       # Color del texto general
-FG_MUTED = "#a6adc8"      # Color del texto secundario o etiquetas de estado
-ACCENT = "#b4befe"        # Color de resalte/bordes/botones activos
-ACCENT_GREEN = "#a6e3a1"  # Éxito (pedido exitoso, bot activo)
-ACCENT_RED = "#f38ba8"    # Error (fallo, bot inactivo, cancelar)
-ACCENT_YELLOW = "#f9e2af" # Advertencias
-ACCENT_BLUE = "#89b4fa"   # Información / Enlaces
+BG_MAIN = "#010a13"       # Fondo principal de ventanas
+BG_CARD = "#091428"       # Fondo de marcos/paneles internos y diálogos
+BG_INPUT = "#050c14"      # Fondo de cajas de entrada de texto
+FG_TEXT = "#f0e6d2"       # Color del texto general
+FG_MUTED = "#a09b8c"      # Color del texto secundario o etiquetas de estado
+ACCENT = "#c8aa6e"        # Color de resalte/bordes/botones activos
+ACCENT_GREEN = "#0acbe6"  # Éxito (pedido exitoso, bot activo)
+ACCENT_RED = "#c83232"    # Error (fallo, bot inactivo, cancelar)
+ACCENT_YELLOW = "#785a28" # Advertencias
+ACCENT_BLUE = "#005a82"   # Información / Enlaces
 ```
 
 ### Reglas para Componentes de Interfaz

@@ -19,7 +19,9 @@ La forma más sencilla de registrar la tarea es directamente desde la aplicació
 > [!NOTE]
 > La aplicación detecta automáticamente si corre como ejecutable compilado (`.exe`) o desde código fuente, y registra la tarea con la ruta dinámica correspondiente.
 > - **Compilado:** La tarea apunta a `SiGCABot.exe --run-job`.
-> - **Desarrollo:** La tarea apunta a `run_job.bat`.
+> - **Desarrollo:** La tarea apunta a `run_job.bat`, que delega en `app_gui.py --run-job` para aplicar las validaciones de estado y actualizar `status.json`.
+
+La tarea registrada desde la GUI se repite cada 1 hora durante 18 horas. El bot evita nuevas solicitudes mediante `status.json`, la detección de duplicados en SiGCA y un bloqueo compartido entre procesos.
 
 Para **eliminar** la tarea, haz clic en **🗑️ Eliminar Tarea** (también requiere permiso de Administrador).
 
@@ -34,7 +36,7 @@ Si prefieres registrar la tarea manualmente, abre una terminal de **PowerShell c
 $exePath = "RUTA\AL\SiGCABot.exe"
 $action = New-ScheduledTaskAction -Execute $exePath -Argument "--run-job" -WorkingDirectory (Split-Path $exePath)
 $trigger = New-ScheduledTaskTrigger -Daily -At 4:30PM
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 10)
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 0
 Register-ScheduledTask -TaskName "SiGCA Auto Lunch Order" -Trigger $trigger -Action $action -Settings $settings -Description "Job automático diario para solicitar almuerzo en SiGCA" -Force
 ```
 
@@ -43,12 +45,13 @@ Register-ScheduledTask -TaskName "SiGCA Auto Lunch Order" -Trigger $trigger -Act
 $batPath = "RUTA\AL\PROYECTO\run_job.bat"
 $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument ('/c "' + $batPath + '"') -WorkingDirectory (Split-Path $batPath)
 $trigger = New-ScheduledTaskTrigger -Daily -At 4:30PM
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 10)
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 0
 Register-ScheduledTask -TaskName "SiGCA Auto Lunch Order" -Trigger $trigger -Action $action -Settings $settings -Description "Job automático diario para solicitar almuerzo en SiGCA" -Force
 ```
 
 > [!IMPORTANT]
 > Reemplaza `RUTA\AL\...` con la ruta absoluta real a tu ejecutable o archivo batch. Si usas la **Opción 1** (desde la GUI), la ruta se calcula automáticamente.
+> La tarea utiliza un disparo diario a la hora configurada y repeticiones horarias durante 18 horas. `retry_delay_sec` pertenece al planificador interno de la GUI; la espera entre intentos del navegador se controla con `retry_attempt_delay_sec`.
 
 ---
 
@@ -79,7 +82,7 @@ Si prefieres usar la interfaz visual de Windows:
      - Marca la casilla **Ejecutar con los privilegios más altos** (Run with highest privileges).
    - En la pestaña **Configuración** (Settings):
      - Marca **Detener la tarea si se ejecuta durante más de:** `1 hora`.
-     - Marca **Si la tarea no se inicia, reiniciarla cada:** `10 minutos` (Intentar hasta 3 veces).
+      - No configurar reinicios adicionales de la tarea. El motor gestiona sus reintentos y la tarea se repite cada hora durante la ventana configurada.
    - Haz clic en **Aceptar**. Te solicitará la contraseña de tu usuario de Windows.
 
 ---

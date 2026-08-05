@@ -16,15 +16,42 @@ import logging
 import asyncio
 import subprocess
 import threading
+from functools import wraps
 from datetime import datetime, time
 
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 from src.config import BASE_DIR, ENV_PATH, CONFIG_PATH, load_status, load_config, get_target_lunch_date, DIAS_SEMANA_MAP
+from src.job_lock import acquire_job_lock
 from src import notifications
 
 logger = logging.getLogger("SiGCABot")
+
+
+def is_confirmed_order_result(exit_code, message, dry_run=False):
+    """Indica si el resultado representa una solicitud real confirmada."""
+    if exit_code != 0 or dry_run:
+        return False
+
+    normalized = (message or "").lower()
+    return (
+        "solicitud exitosa" in normalized
+        or "el almuerzo ya ha sido solicitado" in normalized
+    )
+
+
+def _with_job_lock(func):
+    """Protege las operaciones web contra ejecuciones de procesos concurrentes."""
+    @wraps(func)
+    def wrapped(self, *args, **kwargs):
+        with acquire_job_lock() as acquired:
+            if not acquired:
+                msg = "Ya existe otra automatizacion de almuerzo en ejecucion."
+                return 4, msg, None
+            return func(self, *args, **kwargs)
+
+    return wrapped
 
 def kill_playwright_orphans():
     """
@@ -77,7 +104,8 @@ class LunchBot:
                 "timeout_ms": 30000,
                 "headless": True,
                 "retries": 3,
-                "retry_delay_sec": 300
+                "retry_delay_sec": 300,
+                "retry_attempt_delay_sec": 5
             }
 
     def load_credentials(self):
@@ -105,21 +133,32 @@ class LunchBot:
     # Wrappers de notificación (delegan al módulo notifications)
     # ------------------------------------------------------------------
 
-    def _notify_toast(self, title, message):
+    def _notify_toast(self, title, message, wait=False):
+        if wait:
+            notifications.send_windows_toast(title, message)
+            return
         threading.Thread(
             target=notifications.send_windows_toast,
             args=(title, message),
             daemon=True
         ).start()
 
-    def _notify_telegram(self, message):
+    def _notify_telegram(self, message, wait=False):
+        if wait:
+            notifications.send_telegram_message(self.telegram_token, self.telegram_chat_id, message)
+            return
         threading.Thread(
             target=notifications.send_telegram_message,
             args=(self.telegram_token, self.telegram_chat_id, message),
             daemon=True
         ).start()
 
-    def _notify_telegram_photo(self, photo_path, caption=None):
+    def _notify_telegram_photo(self, photo_path, caption=None, wait=False):
+        if wait:
+            notifications.send_telegram_photo(
+                self.telegram_token, self.telegram_chat_id, photo_path, caption
+            )
+            return
         threading.Thread(
             target=notifications.send_telegram_photo,
             args=(self.telegram_token, self.telegram_chat_id, photo_path, caption),
@@ -475,9 +514,10 @@ class LunchBot:
     # Flujo principal de automatización del almuerzo
     # ------------------------------------------------------------------
 
+    @_with_job_lock
     def run_automation(self, dry_run=False, is_manual=False):
         """
-        Ejecuta el flujo completo de solicitud de almuerzo con hasta 3 intentos incrementales.
+        Ejecuta el flujo completo de solicitud de almuerzo con intentos incrementales configurables.
 
         Args:
             dry_run: Si es True, no confirma el pedido final.
@@ -520,8 +560,17 @@ class LunchBot:
             logger.error(msg, exc_info=True)
             return 3, msg, None
 
-        # 2. Configurar bucle de reintentos incrementales (hasta 3 intentos)
-        max_attempts = 3
+        # 2. Configurar bucle de reintentos incrementales desde config.json
+        try:
+            max_attempts = max(1, int(self.config.get("retries", 3)))
+        except (TypeError, ValueError):
+            max_attempts = 3
+
+        try:
+            retry_attempt_delay = max(0, int(self.config.get("retry_attempt_delay_sec", 5)))
+        except (TypeError, ValueError):
+            retry_attempt_delay = 5
+
         base_timeout_ms = 60000  # 1 minuto base para solicitud
         
         last_exit_code = 3
@@ -598,10 +647,10 @@ class LunchBot:
                         last_evidence = self.capture_evidence(page, f"login_failed_att{attempt}")
                         browser.close()
                         # Si es un error de credenciales incorrectas permanente, no reintentamos
-                        self._notify_toast("Error de Login - SiGCA", "No se pudo iniciar sesión. Revisa tus credenciales.")
-                        self._notify_telegram(f"❌ <b>Error de Inicio de Sesión SiGCA</b>:\n{html.escape(last_msg)}")
+                        self._notify_toast("Error de Login - SiGCA", "No se pudo iniciar sesión. Revisa tus credenciales.", wait=True)
+                        self._notify_telegram(f"❌ <b>Error de Inicio de Sesión SiGCA</b>:\n{html.escape(last_msg)}", wait=True)
                         if last_evidence:
-                            self._notify_telegram_photo(last_evidence, "Error de Inicio de Sesión")
+                            self._notify_telegram_photo(last_evidence, "Error de Inicio de Sesión", wait=True)
                         self._send_email_error(last_msg, last_evidence)
                         return 1, last_msg, last_evidence
 
@@ -679,10 +728,10 @@ class LunchBot:
                             logger.error(last_msg)
                             last_evidence = self.capture_evidence(page, f"lunch_form_closed_att{attempt}")
                             browser.close()
-                            self._notify_toast("Formulario Cerrado - SiGCA", "El horario de solicitud ha finalizado.")
-                            self._notify_telegram(f"⚠️ <b>Formulario Cerrado en SiGCA</b>:\n{html.escape(last_msg)}")
+                            self._notify_toast("Formulario Cerrado - SiGCA", "El horario de solicitud ha finalizado.", wait=True)
+                            self._notify_telegram(f"⚠️ <b>Formulario Cerrado en SiGCA</b>:\n{html.escape(last_msg)}", wait=True)
                             if last_evidence:
-                                self._notify_telegram_photo(last_evidence, "Formulario Cerrado")
+                                self._notify_telegram_photo(last_evidence, "Formulario Cerrado", wait=True)
                             self._send_email_error(last_msg, last_evidence)
                             return 2, last_msg, last_evidence
 
@@ -819,6 +868,9 @@ class LunchBot:
                             except PlaywrightTimeoutError:
                                 status_text = "No se detectó el mensaje de éxito después de enviar. Puede que esté lento o haya fallado."
                                 logger.warning(status_text)
+                                # No marcar la operación como exitosa si el portal
+                                # no confirmó el resultado posterior al clic.
+                                raise RuntimeError(status_text)
 
                             last_evidence = self.capture_evidence(page, f"post_order_click_att{attempt}")
                             last_msg = f"Solicitud exitosa: {status_text}"
@@ -852,29 +904,41 @@ class LunchBot:
             finally:
                 kill_playwright_orphans()
 
-            # Esperar 5s antes del siguiente reintento (si aplica)
+            # Esperar antes del siguiente reintento (si aplica)
             if attempt < max_attempts:
                 import time as time_mod
-                wait_time = 5
+                wait_time = retry_attempt_delay
                 logger.info(f"Esperando {wait_time}s antes de reintentar...")
                 time_mod.sleep(wait_time)
 
-        # Fallo Definitivo tras 3 intentos
+        # Fallo definitivo tras agotar los intentos configurados
         logger.error(f"Todos los {max_attempts} intentos de solicitud fallaron. Último error: {last_msg}")
         
         # Filtros de mensaje amigables
         if "No se pudo identificar el botón" in last_msg:
-            self._notify_toast("Error de Pedido", "No se encontró el botón para solicitar el almuerzo.")
-            self._notify_telegram(f"⚠️ <b>Error en SiGCA</b>:\n<pre>{html.escape(last_msg)}</pre>")
+            self._notify_toast("Error de Pedido", "No se encontró el botón para solicitar el almuerzo.", wait=True)
+            self._notify_telegram(f"⚠️ <b>Error en SiGCA</b>:\n<pre>{html.escape(last_msg)}</pre>", wait=True)
             if last_evidence:
-                self._notify_telegram_photo(last_evidence, "Formulario No Identificado")
+                self._notify_telegram_photo(last_evidence, "Formulario No Identificado", wait=True)
             self._send_email_error(last_msg, last_evidence)
             return 2, last_msg, last_evidence
 
-        self._notify_toast("Error en Automatización", "Ocurrió un error inesperado al procesar la solicitud tras 3 intentos.")
-        self._notify_telegram(f"❌ <b>Fallo en Automatización de Almuerzo (3 intentos)</b>:\n<pre>{html.escape(last_msg)}</pre>")
+        self._notify_toast(
+            "Error en Automatización",
+            f"Ocurrió un error inesperado al procesar la solicitud tras {max_attempts} intentos.",
+            wait=True
+        )
+        self._notify_telegram(
+            f"❌ <b>Fallo en Automatización de Almuerzo ({max_attempts} intentos)</b>:\n"
+            f"<pre>{html.escape(last_msg)}</pre>",
+            wait=True
+        )
         if last_evidence:
-            self._notify_telegram_photo(last_evidence, "Captura de Error de Solicitud (Último Intento)")
+            self._notify_telegram_photo(
+                last_evidence,
+                "Captura de Error de Solicitud (Último Intento)",
+                wait=True
+            )
         self._send_email_error(last_msg, last_evidence)
             
         return last_exit_code, last_msg, last_evidence
@@ -883,14 +947,24 @@ class LunchBot:
     # Cancelación de pedido de almuerzo
     # ------------------------------------------------------------------
 
+    @_with_job_lock
     def cancel_lunch_order(self):
         """
-        Ejecuta el flujo de cancelación de la solicitud de almuerzo con hasta 3 intentos incrementales.
+        Ejecuta el flujo de cancelación con intentos incrementales configurables.
 
         Returns:
             Tupla (exit_code, message, evidence_path)
         """
-        max_attempts = 3
+        try:
+            max_attempts = max(1, int(self.config.get("retries", 3)))
+        except (TypeError, ValueError):
+            max_attempts = 3
+
+        try:
+            retry_attempt_delay = max(0, int(self.config.get("retry_attempt_delay_sec", 5)))
+        except (TypeError, ValueError):
+            retry_attempt_delay = 5
+
         base_timeout_ms = self.config.get("timeout_ms", 30000)
         
         self._notify_toast("Cancelando Almuerzo", "Iniciando proceso de cancelación en SiGCA...")
@@ -1045,10 +1119,10 @@ class LunchBot:
             finally:
                 kill_playwright_orphans()
 
-            # Esperar 5s antes del siguiente reintento (si aplica)
+            # Esperar antes del siguiente reintento (si aplica)
             if attempt < max_attempts:
                 import time as time_mod
-                wait_time = 5
+                wait_time = retry_attempt_delay
                 logger.info(f"Esperando {wait_time}s antes de reintentar...")
                 time_mod.sleep(wait_time)
 
@@ -1057,25 +1131,37 @@ class LunchBot:
         
         # Filtros de mensaje amigables
         if "No se encontró ningún botón activo" in last_msg:
-            self._notify_toast("Cancelación no Disponible", "No hay una solicitud activa que cancelar.")
-            self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{last_msg}")
+            self._notify_toast("Cancelación no Disponible", "No hay una solicitud activa que cancelar.", wait=True)
+            self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{last_msg}", wait=True)
             if last_evidence:
-                self._notify_telegram_photo(last_evidence, "Pantalla de Cancelación no Disponible")
+                self._notify_telegram_photo(last_evidence, "Pantalla de Cancelación no Disponible", wait=True)
             self._send_email_error(last_msg, last_evidence, is_cancellation=True)
             return 2, last_msg, last_evidence
         
         if "deshabilitado" in last_msg:
-            self._notify_toast("Cancelación no Disponible", "El botón de cancelación está bloqueado.")
-            self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{last_msg}")
+            self._notify_toast("Cancelación no Disponible", "El botón de cancelación está bloqueado.", wait=True)
+            self._notify_telegram(f"ℹ️ <b>SiGCA Bot</b>:\n{last_msg}", wait=True)
             if last_evidence:
-                self._notify_telegram_photo(last_evidence, "Botón de Cancelación Deshabilitado")
+                self._notify_telegram_photo(last_evidence, "Botón de Cancelación Deshabilitado", wait=True)
             self._send_email_error(last_msg, last_evidence, is_cancellation=True)
             return 2, last_msg, last_evidence
 
-        self._notify_toast("Error al Cancelar", "Ocurrió un error inesperado al cancelar tras 3 intentos.")
-        self._notify_telegram(f"❌ <b>Fallo al Cancelar Almuerzo (3 intentos)</b>:\n<pre>{html.escape(last_msg)}</pre>")
+        self._notify_toast(
+            "Error al Cancelar",
+            f"Ocurrió un error inesperado al cancelar tras {max_attempts} intentos.",
+            wait=True
+        )
+        self._notify_telegram(
+            f"❌ <b>Fallo al Cancelar Almuerzo ({max_attempts} intentos)</b>:\n"
+            f"<pre>{html.escape(last_msg)}</pre>",
+            wait=True
+        )
         if last_evidence:
-            self._notify_telegram_photo(last_evidence, "Captura de Error de Cancelación (Último Intento)")
+            self._notify_telegram_photo(
+                last_evidence,
+                "Captura de Error de Cancelación (Último Intento)",
+                wait=True
+            )
         self._send_email_error(last_msg, last_evidence, is_cancellation=True)
             
         return last_exit_code, last_msg, last_evidence

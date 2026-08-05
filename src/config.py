@@ -47,9 +47,6 @@ def deobfuscate_text(obfuscated):
         # original para compatibilidad con .env sin ofuscar (texto plano)
         return obfuscated
 
-# Credencial por defecto del remitente corporativo
-DEFAULT_SMTP_PASSWORD_OBFUSCATED = "IQMzIWElBAc4RQcUGhNrAgFHUg=="
-
 # ---------------------------------------------------------------------------
 # Inicialización del entorno (se ejecuta al importar este módulo)
 # ---------------------------------------------------------------------------
@@ -271,8 +268,7 @@ def load_status():
                         
                     if changed:
                         try:
-                            with open(STATUS_PATH, "w", encoding="utf-8") as fw:
-                                json.dump(data, fw, indent=2, ensure_ascii=False)
+                            _write_json_atomic(STATUS_PATH, data)
                         except Exception:
                             pass
                     return data
@@ -296,10 +292,26 @@ def save_status(data):
     """Guarda el archivo status.json con protección de hilo."""
     with status_lock:
         try:
-            with open(STATUS_PATH, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            _write_json_atomic(STATUS_PATH, data)
         except Exception as e:
             logger.error(f"Error al guardar status.json: {e}")
+
+
+def _write_json_atomic(path, data):
+    """Escribe un JSON temporal y lo reemplaza de forma atomica."""
+    temp_path = f"{path}.{os.getpid()}.tmp"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
 
 # ---------------------------------------------------------------------------
 # Funciones de Persistencia — config.json
@@ -324,6 +336,7 @@ def load_config():
         "headless": True,
         "retries": 3,
         "retry_delay_sec": 300,
+        "retry_attempt_delay_sec": 5,
         "prefer_menu": "saludable",
         "disabled_days": [],
         "questionnaire": {
@@ -579,4 +592,3 @@ def check_and_repair_startup():
     except Exception as e:
         logger.error(f"Error durante el chequeo y auto-reparación de Auto-Inicio: {e}")
     return False
-

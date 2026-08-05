@@ -5,7 +5,7 @@ description: Guidelines and design system rules for creating styled notification
 
 # Skill: Notification & Popup Designs (SiGCABot)
 
-Esta habilidad documenta las directrices y estándares para el diseño de ventanas emergentes (popups), cuadros de diálogo modal (confirmaciones, alertas y errores) y notificaciones de escritorio en **SiGCABot**, garantizando que nunca se use el estilo estándar gris de Windows y se mantenga la estética *Catppuccin* premium.
+Esta habilidad documenta las directrices y estándares para el diseño de ventanas emergentes (popups), cuadros de diálogo modal (confirmaciones, alertas y errores) y notificaciones de escritorio en **SiGCABot**, garantizando que nunca se use el estilo estándar gris de Windows y se mantenga la estética *Hextech Client* premium.
 
 ## 🎨 Principios de Diseño para Notificaciones y Modales
 
@@ -14,13 +14,13 @@ Esta habilidad documenta las directrices y estándares para el diseño de ventan
    - En su lugar, instanciar componentes visuales basados en `tk.Toplevel` que usen colores de la paleta del proyecto.
    
 2. **Coherencia Cromática:**
-   - **Fondo:** Siempre usar `BG_CARD` (`#252538`) para el cuerpo interno del popup y `BG_MAIN` (`#1e1e2e`) para las divisiones secundarias.
+   - **Fondo:** Siempre usar `BG_CARD` (`#091428`) para el cuerpo interno del popup y `BG_MAIN` (`#010a13`) para las divisiones secundarias.
    - **Borde de Alerta:** El marco exterior debe tener un borde resaltado de `2px` usando el color del tipo de alerta:
-     - Información/Info: `ACCENT_BLUE` (`#89b4fa`)
-     - Éxito/Success: `ACCENT_GREEN` (`#a6e3a1`)
-     - Advertencia/Warning: `ACCENT_YELLOW` (`#f9e2af`)
-     - Error/Critical: `ACCENT_RED` (`#f38ba8`)
-   - **Texto:** El cuerpo del texto debe ser `FG_TEXT` (`#cdd6f4`) y las descripciones secundarias `FG_MUTED` (`#a6adc8`).
+     - Información/Info: `ACCENT_BLUE` (`#005a82`)
+     - Éxito/Success: `ACCENT_GREEN` (`#0acbe6`)
+     - Advertencia/Warning: `ACCENT_YELLOW` (`#785a28`)
+     - Error/Critical: `ACCENT_RED` (`#c83232`)
+   - **Texto:** El cuerpo del texto debe ser `FG_TEXT` (`#f0e6d2`) y las descripciones secundarias `FG_MUTED` (`#a09b8c`).
 
 3. **Tipografía y Legibilidad:**
    - Usar la fuente `Segoe UI` (o `Outfit` si está instalada).

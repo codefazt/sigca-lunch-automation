@@ -52,11 +52,16 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         status_data = load_status()
+        active = status_data.get("is_active", True)
+        last_status = status_data.get("last_run_status", "N/A")
+        service_status = "paused" if not active else (
+            "error" if str(last_status).lower().startswith("error") else "ok"
+        )
         response = {
-            "status": "ok",
-            "active": status_data.get("is_active", True),
+            "status": service_status,
+            "active": active,
             "last_run": status_data.get("last_run_timestamp", "Nunca"),
-            "last_status": status_data.get("last_run_status", "N/A"),
+            "last_status": last_status,
             "version": APP_VERSION
         }
         self.wfile.write(json.dumps(response).encode("utf-8"))
@@ -145,7 +150,7 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
         
         @media (max-width: 768px) {
             .wrapper { flex-direction: column; }
-            .sidebar { width: 100%; height: auto; position: static; border-right: none; border-bottom: 1px solid #313244; }
+            .sidebar { width: 100%; height: auto; position: static; border-right: none; border-bottom: 1px solid #1e2328; }
             .content { padding: 20px; }
         }
     </style>
@@ -177,7 +182,7 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
 
             <div id="intro" class="section">
                 <h2>Introducción</h2>
-                <p><strong>SiGCABot</strong> es una herramienta de automatización diseñada para simplificar y asegurar la solicitud diaria de almuerzo en el portal corporativo SiGCA. Está construida con un motor robusto de <strong>Playwright</strong> para simular las interacciones del navegador y una interfaz premium de escritorio en <strong>Tkinter</strong> estructurada bajo la paleta de colores <strong>Catppuccin</strong>.</p>
+                <p><strong>SiGCABot</strong> es una herramienta de automatización diseñada para simplificar y asegurar la solicitud diaria de almuerzo en el portal corporativo SiGCA. Está construida con un motor robusto de <strong>Playwright</strong> para simular las interacciones del navegador y una interfaz premium de escritorio en <strong>Tkinter</strong> estructurada bajo la paleta de colores <strong>Hextech Client</strong>.</p>
                 <p>A continuación se describe cada una de las secciones y campos de configuración para su puesta en marcha y mantenimiento.</p>
             </div>
 
@@ -250,9 +255,9 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
                 <h2>6. Consola de Logs en Tiempo Real</h2>
                 <p>Muestra el log de eventos estructurado y con código de colores según su severidad:</p>
                 <ul>
-                    <li><strong style="color:#89b4fa;">Celeste (INFO):</strong> Indica un flujo normal (ej. 'Iniciando navegación', 'Guardando configuración').</li>
-                    <li><strong style="color:#f9e2af;">Amarillo (WARNING):</strong> Advertencias que no detienen el flujo (ej. 'Reintentando conexión con Telegram').</li>
-                    <li><strong style="color:#f38ba8;">Rojo (ERROR/CRITICAL):</strong> Errores críticos que impiden el pedido (ej. 'Contraseñas expiradas', 'Selector del botón no encontrado').</li>
+                    <li><strong style="color:#005a82;">Azul (INFO):</strong> Indica un flujo normal (ej. 'Iniciando navegación', 'Guardando configuración').</li>
+                    <li><strong style="color:#785a28;">Bronce (WARNING):</strong> Advertencias que no detienen el flujo (ej. 'Reintentando conexión con Telegram').</li>
+                    <li><strong style="color:#c83232;">Rojo (ERROR/CRITICAL):</strong> Errores críticos que impiden el pedido (ej. 'Credenciales inválidas', 'Selector del botón no encontrado').</li>
                 </ul>
                 <div class="img-container">
                     <img src="/images_info?name=console_log_section.png" alt="Consola de Logs">
@@ -330,19 +335,19 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
 
             <div id="notification-designs" class="section">
                 <h2>Estilo de Popups y Notificaciones del Bot</h2>
-                <p>Con el fin de ofrecer una experiencia Premium y unificada con la paleta <strong>Catppuccin</strong> de modo oscuro, la aplicación tiene prohibido el uso de ventanas nativas del sistema operativo. Los popups del sistema siguen las siguientes directrices:</p>
+                <p>Con el fin de ofrecer una experiencia Premium y unificada con la paleta <strong>Hextech Client</strong> de modo oscuro, la aplicación tiene prohibido el uso de ventanas nativas del sistema operativo. Los popups del sistema siguen las siguientes directrices:</p>
                 
                 <div class="notification-info">
-                    <strong>ℹ Información (Info):</strong> Utiliza el color de realce celeste <code>#89b4fa</code> para su borde e icono circular de estado. Se usa para notificar acciones completadas o cargas neutras.
+                    <strong>ℹ Información (Info):</strong> Utiliza el color azul <code>#005a82</code> para su borde e icono circular de estado. Se usa para notificar acciones completadas o cargas neutras.
                 </div>
                 <div class="notification-success">
-                    <strong>✓ Éxito (Success):</strong> Enmarcada con el tono verde <code>#a6e3a1</code>. Aparece únicamente cuando se confirma un pedido manual, simulación exitosa o guardado correcto de configuración.
+                    <strong>✓ Éxito (Success):</strong> Enmarcada con el tono cian <code>#0acbe6</code>. Aparece únicamente cuando se confirma un pedido manual, simulación exitosa o guardado correcto de configuración.
                 </div>
                 <div class="notification-warning">
-                    <strong>⚠ Advertencia (Warning):</strong> Borde exterior amarillo <code>#f9e2af</code>. Se dispara ante alertas críticas que permiten continuar la ejecución, como la confirmación de la cancelación diaria.
+                    <strong>⚠ Advertencia (Warning):</strong> Borde exterior bronce <code>#785a28</code>. Se dispara ante alertas críticas que permiten continuar la ejecución, como la confirmación de la cancelación diaria.
                 </div>
                 <div class="notification-error">
-                    <strong>❌ Error / Crítico (Error):</strong> Destaca con el color rojo <code>#f38ba8</code>. Se muestra cuando la automatización falla, las claves están vacías o la red impide conectar con los servidores corporativos.
+                    <strong>❌ Error / Crítico (Error):</strong> Destaca con el color rojo <code>#c83232</code>. Se muestra cuando la automatización falla, las claves están vacías o la red impide conectar con los servidores corporativos.
                 </div>
                 <p style="margin-top: 20px;">Cada botón de acción ("Aceptar", "Sí", "No") dentro de estos modales de Tkinter implementa hover dinámico que se oscurece automáticamente al posicionar el cursor sobre él, manteniendo la interactividad fluida.</p>
             </div>
@@ -390,7 +395,13 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
 
         last_run_ts = status_data.get("last_run_timestamp", "Nunca")
         last_run_status = status_data.get("last_run_status", "N/A")
-        status_color = '#0acbe6' if last_run_status == 'success' else '#c83232'
+        service_status_text = "Activo" if status_data.get("is_active", True) else "Pausado manualmente"
+        if last_run_status == 'success':
+            status_color = '#0acbe6'
+        elif last_run_status in ('skipped', 'dry_run_success'):
+            status_color = '#785a28'
+        else:
+            status_color = '#c83232'
 
         html_page = f"""<!DOCTYPE html>
 <html>
@@ -428,7 +439,7 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
             <div>
                 <div class="card">
                     <h2 style="color: #c8aa6e; margin-top:0; border-bottom: 1px solid #1e2328; padding-bottom: 8px;">Estado General</h2>
-                    <p><strong>Estatus:</strong> Saludable (Funcionando)</p>
+                     <p><strong>Estatus:</strong> {service_status_text}</p>
                     <p><strong>Última Ejecución:</strong> {last_run_ts}</p>
                     <p><strong>Último Resultado:</strong> <span style="color: {status_color}">{last_run_status.upper()}</span></p>
                 </div>
