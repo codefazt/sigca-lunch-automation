@@ -29,6 +29,27 @@ from src import notifications
 logger = logging.getLogger("SiGCABot")
 
 
+def _fill_login_field(field, value, field_name):
+    """Rellena un campo de autenticación y verifica que Microsoft conserve el valor."""
+    field.fill(value)
+    try:
+        if field.input_value() == value:
+            return True
+    except Exception:
+        pass
+
+    # Algunas cargas lentas de Microsoft limpian el valor programático inicial.
+    logger.warning(f"Microsoft no conservó el valor del campo de {field_name}; reintentando con escritura simulada...")
+    try:
+        field.click()
+        field.press("Control+A")
+        field.type(value, delay=20)
+        return field.input_value() == value
+    except Exception as e:
+        logger.warning(f"No se pudo confirmar el campo de {field_name}: {e}")
+        return False
+
+
 def is_confirmed_order_result(exit_code, message, dry_run=False):
     """Indica si el resultado representa una solicitud real confirmada."""
     if exit_code != 0 or dry_run:
@@ -429,7 +450,7 @@ class LunchBot:
             
             raise ConnectionError(f"{reason} (Detalle técnico: {err_msg})")
 
-        ms_sso_button = "button:has-text('Continuar con Microsoft'), button:has-text('Microsoft')"
+        ms_sso_button = "button:has-text('Continuar con Microsoft'):visible, button:has-text('Microsoft'):visible"
         email_selector = "input[type='email'], input[placeholder*='usuario' i], input[placeholder*='correo' i], input[placeholder*='email' i], input[formcontrolname='email']"
         password_selector = "input[type='password'], input[placeholder*='contraseña' i], input[placeholder*='clave' i], input[formcontrolname='password']"
         submit_selector = "button[type='submit'], button:has-text('Iniciar'), button:has-text('Ingresar'), button:has-text('Login')"
@@ -447,39 +468,59 @@ class LunchBot:
 
         if is_sso:
             self.capture_evidence(page, "before_sso_click")
-            page.click(ms_sso_button)
+            page.locator(ms_sso_button).first.click()
 
-            ms_email_selector = "input[type='email'], input[name='loginfmt'], #i0116"
-            page.wait_for_selector(ms_email_selector, timeout=timeout)
-            page.fill(ms_email_selector, self.username)
+            # Microsoft muestra primero una pantalla de carga; no basta con que
+            # el input exista en el DOM, debe ser el campo visible y accionable.
+            ms_email_selector = "input[name='loginfmt']:visible, #i0116:visible, input[type='email']:visible"
+            ms_email_field = page.locator(ms_email_selector).first
+            ms_email_field.wait_for(state="visible", timeout=timeout)
+            if not _fill_login_field(ms_email_field, self.username, "correo"):
+                logger.warning("No se pudo confirmar el correo en el formulario de Microsoft SSO.")
+                self.capture_evidence(page, "ms_sso_email_fill_failed")
+                return False
             self.capture_evidence(page, "ms_sso_email_filled")
 
-            ms_next_selector = "#idSIButton9, input[type='submit']"
-            page.click(ms_next_selector)
+            ms_next_selector = "#idSIButton9:visible, input[type='submit']:visible, button:has-text('Next'):visible"
+            ms_next_button = page.locator(ms_next_selector).first
+            ms_next_button.wait_for(state="visible", timeout=timeout)
+            ms_next_button.click()
 
-            ms_password_selector = "input[type='password'], input[name='passwd'], #i0118"
-            page.wait_for_selector(ms_password_selector, timeout=timeout)
-            page.wait_for_timeout(1000)
+            ms_password_selector = "input[name='passwd']:visible, #i0118:visible, input[type='password']:visible"
+            ms_password_field = page.locator(ms_password_selector).first
+            try:
+                ms_password_field.wait_for(state="visible", timeout=timeout)
+            except PlaywrightTimeoutError:
+                logger.warning("Microsoft no mostró el campo de contraseña después de confirmar el correo.")
+                self.capture_evidence(page, "ms_sso_password_not_ready")
+                return False
 
-            page.fill(ms_password_selector, password)
+            if not _fill_login_field(ms_password_field, password, "contraseña"):
+                logger.warning("No se pudo confirmar la contraseña en el formulario de Microsoft SSO.")
+                self.capture_evidence(page, "ms_sso_password_fill_failed")
+                return False
             self.capture_evidence(page, "ms_sso_password_filled")
 
-            ms_submit_selector = "#idSIButton9, input[type='submit']"
-            page.click(ms_submit_selector)
+            ms_submit_selector = "#idSIButton9:visible, input[type='submit']:visible, button:has-text('Sign in'):visible"
+            ms_submit_button = page.locator(ms_submit_selector).first
+            ms_submit_button.wait_for(state="visible", timeout=timeout)
+            ms_submit_button.click()
             page.wait_for_timeout(2000)
 
-            if page.locator("#passwordError").is_visible() or page.locator("#usernameError").is_visible():
-                error_txt = page.locator("#passwordError").text_content() or page.locator("#usernameError").text_content() or "Error de credenciales"
+            ms_error_selector = "#passwordError:visible, #usernameError:visible, div[role='alert']:visible"
+            ms_error = page.locator(ms_error_selector).first
+            if ms_error.count() > 0 and ms_error.is_visible():
+                error_txt = ms_error.text_content() or "Error de credenciales"
                 logger.warning(f"Error detectado en formulario de Microsoft SSO: {error_txt.strip()}")
                 self.capture_evidence(page, "ms_sso_error_detected")
                 return False
 
-            ms_stay_signed_in_selector = "#idSIButton9, input[type='submit']"
+            ms_stay_signed_in_selector = "#idSIButton9:visible, input[type='submit']:visible"
             try:
-                if page.locator(ms_stay_signed_in_selector).is_visible(timeout=5000):
+                if page.locator(ms_stay_signed_in_selector).first.is_visible(timeout=5000):
                     logger.info("Confirmando diálogo '¿Mantener la sesión iniciada?' de Microsoft...")
                     self.capture_evidence(page, "ms_sso_stay_signed_in_prompt")
-                    page.click(ms_stay_signed_in_selector)
+                    page.locator(ms_stay_signed_in_selector).first.click()
             except Exception:
                 pass
         else:

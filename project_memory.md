@@ -162,6 +162,11 @@ Hasta la fecha (30 de junio de 2026), se han implementado y validado con éxito 
 - En desarrollo, el auto-inicio utiliza `pythonw.exe` para evitar consolas visibles durante el logon.
 - El acceso directo de Startup queda reservado como fallback cuando el Registro no puede configurarse.
 
+### 27. Robustez del SSO de Microsoft (Versión 2.6.8)
+- Se corrigió el flujo de autenticación para esperar campos visibles y accionables después de la pantalla de carga de Microsoft.
+- Se verifica que el correo y la contraseña realmente permanezcan escritos antes de enviar el formulario; si Microsoft limpia el valor inicial, se reintenta mediante escritura simulada.
+- Se agregó una prueba de regresión para la persistencia ofuscada de múltiples contraseñas y otra para el reintento de llenado del campo SSO.
+
 ---
 
 ## 🐞 Historial de Fallos y Soluciones (Failures & Fixes)

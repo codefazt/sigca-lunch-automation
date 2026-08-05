@@ -7,10 +7,11 @@ from unittest.mock import patch, MagicMock
 # Importar la clase LunchBot
 # Usamos try/except para evitar fallas si lunch_bot aún no está completamente implementado (TDD estricto)
 try:
-    from src.bot_engine import LunchBot, is_confirmed_order_result
+    from src.bot_engine import LunchBot, is_confirmed_order_result, _fill_login_field
 except ImportError:
     LunchBot = None
     is_confirmed_order_result = None
+    _fill_login_field = None
 
 
 def test_lunch_bot_class_exists():
@@ -130,6 +131,49 @@ def test_load_credentials_missing_passwords(tmp_path):
          patch("src.bot_engine.CONFIG_PATH", str(tmp_path / "config.json")):
         with pytest.raises(ValueError, match="Falta la variable de entorno SIGCA_PASSWORDS"):
             LunchBot()
+
+
+def test_save_env_password_candidates_round_trip(tmp_path):
+    from src.config import load_env_dict, save_env_values
+
+    env_file = tmp_path / ".env"
+    with patch("src.config.ENV_PATH", str(env_file)):
+        save_env_values({
+            "SIGCA_USER": "user@example.com",
+            "SIGCA_PASSWORDS": "Johan2022.,johan2022."
+        })
+
+        loaded = load_env_dict()
+        raw = env_file.read_text(encoding="utf-8")
+
+    assert loaded["SIGCA_PASSWORDS"] == "Johan2022.,johan2022."
+    assert "SIGCA_PASSWORDS=Johan2022.,johan2022." not in raw
+
+
+def test_fill_login_field_retries_when_programmatic_value_is_cleared():
+    class FakeLoginField:
+        def __init__(self):
+            self.value = ""
+
+        def fill(self, value):
+            self.value = ""
+
+        def input_value(self):
+            return self.value
+
+        def click(self):
+            pass
+
+        def press(self, key):
+            self.value = ""
+
+        def type(self, value, delay=0):
+            self.value = value
+
+    field = FakeLoginField()
+
+    assert _fill_login_field(field, "Johan2022.", "contraseña") is True
+    assert field.value == "Johan2022."
 
 
 # ---------------------------------------------------------------------------
