@@ -26,6 +26,12 @@ from src.config import BASE_DIR, ENV_PATH, CONFIG_PATH, load_status, load_config
 from src.job_lock import acquire_job_lock
 from src import notifications
 
+# Asegurar que Playwright use la ruta de navegadores globales de la AppData del usuario
+if "PLAYWRIGHT_BROWSERS_PATH" not in os.environ:
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(
+        os.path.expanduser("~"), "AppData", "Local", "ms-playwright"
+    )
+
 logger = logging.getLogger("SiGCABot")
 
 

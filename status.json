@@ -1,12 +1,12 @@
 {
   "is_active": true,
   "last_successful_run": "2026-07-22",
-  "last_run_timestamp": "2026-07-22 17:19:35",
-  "last_run_status": "success",
+  "last_run_timestamp": "2026-08-12 15:19:03",
+  "last_run_status": "dry_run_success",
   "startup_on_boot": true,
   "cancellations_count": 0,
   "last_cancellation_date": "",
   "is_cancelled_today": false,
-  "last_cleanup_date": "2026-08-05",
+  "last_cleanup_date": "2026-08-12",
   "last_successful_target_date": "2026-07-23"
 }

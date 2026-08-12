@@ -1,21 +1,21 @@
 @echo off
-:: =============================================================================
-:: SiGCABot — Script de Compilación Automatizada
-:: =============================================================================
-:: Este script construye el ejecutable portable de Windows (.exe) listo para
-:: distribución. Empaqueta todos los recursos necesarios y crea una carpeta
-:: limpia de release.
-::
-:: Requisitos:
-::   - Entorno virtual 'venv' con todas las dependencias instaladas
-::   - PyInstaller instalado (incluido en requirements.txt)
-::   - Playwright Chromium instalado en el sistema del usuario final
-::
-:: Uso:
-::   build.bat
-:: =============================================================================
+REM =============================================================================
+REM SiGCABot - Script de Compilacion Automatizada
+REM =============================================================================
+REM Este script construye el ejecutable portable de Windows (.exe) listo para
+REM distribucion. Empaqueta todos los recursos necesarios y crea una carpeta
+REM limpia de release.
+REM
+REM Requisitos:
+REM   - Entorno virtual 'venv' con todas las dependencias instaladas
+REM   - PyInstaller instalado (incluido en requirements.txt)
+REM   - Playwright Chromium instalado en el sistema del usuario final
+REM
+REM Uso:
+REM   build.bat
+REM =============================================================================
 
-:: Procesar argumentos
+REM Procesar argumentos
 set "HELP_FLAG="
 set "PACKAGE_FLAG="
 set "NO_PAUSE="
@@ -59,10 +59,10 @@ echo    Fecha: %date% %time%
 echo ===================================================
 echo.
 
-:: Cambiar al directorio donde reside este script
+REM Cambiar al directorio donde reside este script
 cd /d "%~dp0"
 
-:: Verificar entorno virtual
+REM Verificar entorno virtual
 if not exist "venv" (
     echo [ERROR] No se encontro el entorno virtual 'venv'.
     echo         Ejecuta primero: python -m venv venv
@@ -73,18 +73,18 @@ if not exist "venv" (
     exit /b 1
 )
 
-:: Activar entorno virtual
+REM Activar entorno virtual
 echo [1/5] Activando entorno virtual...
 call venv\Scripts\activate
 
-:: Verificar PyInstaller
+REM Verificar PyInstaller
 where pyinstaller >nul 2>&1
 if errorlevel 1 (
     echo [WARN] PyInstaller no encontrado. Instalando...
     pip install pyinstaller
 )
 
-:: Limpiar build anterior
+REM Limpiar build anterior
 echo [2/5] Limpiando compilaciones anteriores...
 if exist "dist\SiGCABot_Release\.env" (
     echo [INFO] Respaldando archivo .env de prueba...
@@ -98,7 +98,7 @@ if exist "dist\SiGCABot_Release\config.json" (
 if exist "build" rmdir /s /q "build"
 if exist "dist\SiGCABot_Release" rmdir /s /q "dist\SiGCABot_Release"
 
-:: Compilar con PyInstaller
+REM Compilar con PyInstaller
 echo [3/5] Compilando el ejecutable con PyInstaller...
 echo         Esto puede tardar varios minutos...
 echo.
@@ -107,32 +107,30 @@ pyinstaller SiGCABot.spec --noconfirm
 if errorlevel 1 (
     echo.
     echo [ERROR] La compilacion fallo. Revisa los errores de PyInstaller arriba.
-    pause
+    if not defined NO_PAUSE (
+        pause
+    )
     exit /b 1
 )
 
-:: Crear carpeta de release limpia
+REM Crear carpeta de release limpia
 echo [4/5] Creando paquete de distribucion en dist\SiGCABot_Release\...
 mkdir "dist\SiGCABot_Release" 2>nul
 
-:: Copiar ejecutable
+REM Copiar ejecutable
 copy /y "dist\SiGCABot.exe" "dist\SiGCABot_Release\SiGCABot.exe"
 
-:: Copiar archivos de soporte
+REM Copiar archivos de soporte
 copy /y ".env.template" "dist\SiGCABot_Release\.env.template"
 copy /y "run_job.bat" "dist\SiGCABot_Release\run_job.bat"
 copy /y "README.md" "dist\SiGCABot_Release\README.md"
 copy /y "WINDOWS_SCHEDULER.md" "dist\SiGCABot_Release\WINDOWS_SCHEDULER.md"
 
-:: Copiar carpeta de imágenes de manual (Ya no es necesario, el ejecutable las lee de forma interna desde sys._MEIPASS)
-:: xcopy /e /i /y "images_info" "dist\SiGCABot_Release\images_info"
-
-:: Crear carpetas necesarias
+REM Crear carpetas necesarias
 mkdir "dist\SiGCABot_Release\logs" 2>nul
 mkdir "dist\SiGCABot_Release\evidence" 2>nul
 
-
-:: Restaurar configuraciones respaldadas si existen
+REM Restaurar configuraciones respaldadas si existen
 if exist "dist\.env.bak" (
     echo [INFO] Restaurando archivo .env respaldado...
     copy /y "dist\.env.bak" "dist\SiGCABot_Release\.env" >nul
@@ -144,7 +142,7 @@ if exist "dist\config.json.bak" (
     del /f /q "dist\config.json.bak"
 )
 
-:: Firmar digitalmente el ejecutable de forma gratuita
+REM Firmar digitalmente el ejecutable de forma gratuita
 if exist "sign_app.ps1" (
     echo [INFO] Iniciando el proceso de firma digital...
     powershell -NoProfile -ExecutionPolicy Bypass -File "sign_app.ps1"

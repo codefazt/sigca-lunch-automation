@@ -1651,6 +1651,21 @@ class AppGUI:
             )
             chk.grid(row=1, column=idx, sticky="w", padx=15, pady=(5, 15))
 
+        # --- Grupo 6: Entorno y Navegador Web (Playwright Chromium) ---
+        group_env = tk.Frame(scrollable_frame, bg=BG_CARD, bd=1, highlightbackground="#1e2328", highlightthickness=1)
+        group_env.pack(fill="x", pady=10, padx=5)
+
+        title_env = tk.Label(group_env, text="ENTORNO Y NAVEGADOR WEB (PLAYWRIGHT CHROMIUM)", font=("Segoe UI", 8, "bold"), bg=BG_CARD, fg=ACCENT)
+        title_env.grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 5))
+
+        env_desc = tk.Label(group_env, text="Descarga e instala el navegador Chromium de Playwright necesario para ejecutar la automatización.\nÚtil en nuevas instalaciones o tras actualizaciones del sistema.", bg=BG_CARD, fg=FG_MUTED, font=("Segoe UI", 9), justify="left")
+        env_desc.grid(row=1, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 10))
+
+        self.install_env_btn = tk.Button(group_env, text="🌐 Instalar / Reparar Chromium", font=("Segoe UI", 9, "bold"), command=self.install_playwright_chromium_gui)
+        self.install_env_btn.grid(row=1, column=2, sticky="e", padx=(0, 15), pady=(0, 10))
+        self.style_button(self.install_env_btn, "magic")
+        group_env.columnconfigure(0, weight=1)
+
         # --- Loading indicator ---
         self.loading_lbl = tk.Label(scrollable_frame, text="", font=("Segoe UI", 10, "bold"), bg=BG_MAIN, fg=ACCENT_GREEN)
         self.loading_lbl.pack(pady=5)
@@ -1662,6 +1677,10 @@ class AppGUI:
         self.save_btn = tk.Button(btn_frame, text="Guardar Configuración", font=("Segoe UI", 10, "bold"), command=self.save_settings)
         self.save_btn.pack(side="left")
         self.style_button(self.save_btn, "primary")
+
+        self.install_deps_btn = tk.Button(btn_frame, text="🌐 Instalar Chromium", font=("Segoe UI", 10, "bold"), command=self.install_playwright_chromium_gui)
+        self.install_deps_btn.pack(side="left", padx=(10, 0))
+        self.style_button(self.install_deps_btn, "subtle")
 
         self.test_btn = tk.Button(btn_frame, text="Simular Pedido (Dry Run)", font=("Segoe UI", 10, "bold"), command=self.run_dry_run_test)
         self.test_btn.pack(side="right")
@@ -1825,8 +1844,13 @@ class AppGUI:
 
         cleanup_frame = tk.Frame(info_frame, bg=BG_CARD)
         cleanup_frame.pack(fill="x", pady=(0, 20))
-        self.cleanup_btn = tk.Button(cleanup_frame, text="🧹 Limpiar Todos los Registros (Logs y Evidencias)", font=("Segoe UI", 10, "bold"), command=self.run_manual_cleanup)
-        self.cleanup_btn.pack(side="left", fill="x", expand=True)
+
+        self.health_install_chromium_btn = tk.Button(cleanup_frame, text="🌐 Instalar Navegador Chromium", font=("Segoe UI", 10, "bold"), command=self.install_playwright_chromium_gui)
+        self.health_install_chromium_btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.style_button(self.health_install_chromium_btn, "primary")
+
+        self.cleanup_btn = tk.Button(cleanup_frame, text="🧹 Limpiar Registros (Logs y Evidencias)", font=("Segoe UI", 10, "bold"), command=self.run_manual_cleanup)
+        self.cleanup_btn.pack(side="right", fill="x", expand=True, padx=(5, 0))
         self.style_button(self.cleanup_btn, "danger")
 
 
@@ -2401,25 +2425,51 @@ class AppGUI:
     # ---------------------------------------------------------------------------
 
     def verify_dependencies_startup(self):
-        """Verifica de forma asíncrona en un hilo que Playwright y Chromium funcionen."""
+        """Verifica en un subproceso aislado fuera del hilo de la GUI que Playwright y Chromium funcionen."""
         logger.info("Iniciando verificación automática de dependencias...")
 
         def check_deps_thread():
             try:
-                # Forzar a Playwright a usar los navegadores globales del usuario al correr compilado
-                os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(
+                import sys
+                entry_script = sys.argv[0]
+                if getattr(sys, 'frozen', False):
+                    cmd = [sys.executable, "--check-deps"]
+                else:
+                    abs_script = os.path.abspath(entry_script)
+                    cmd = [sys.executable, abs_script, "--check-deps"]
+
+                env = os.environ.copy()
+                env["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(
                     os.path.expanduser("~"), "AppData", "Local", "ms-playwright"
                 )
-                from playwright.sync_api import sync_playwright
-                with sync_playwright() as p:
-                    # Usar un timeout bajo (15s) para la comprobación del navegador
-                    browser = p.chromium.launch(headless=True, timeout=15000)
-                    browser.close()
+
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="backslashreplace",
+                    env=env,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                )
                 
-                logger.info("✅ Verificación de dependencias exitosa: Playwright y Chromium están listos y operativos.")
+                try:
+                    stdout, _ = proc.communicate(timeout=20)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    stdout = "Timeout: La verificación de dependencias superó el tiempo límite (20s)."
+
+                if proc.returncode == 0 and "OK_PLAYWRIGHT" in (stdout or ""):
+                    logger.info("✅ Verificación de dependencias exitosa: Playwright y Chromium están listos y operativos.")
+                else:
+                    err_detail = stdout or f"El subproceso terminó con código {proc.returncode}"
+                    logger.error(f"❌ Fallo en la verificación de dependencias: {err_detail}")
+                    self.root.after(0, lambda: self._handle_dep_check_failure(err_detail))
+
             except Exception as e:
                 err_detail = str(e)
-                logger.error(f"❌ Fallo en la verificación de dependencias: {err_detail}")
+                logger.error(f"❌ Excepción en la verificación de dependencias: {err_detail}")
                 self.root.after(0, lambda: self._handle_dep_check_failure(err_detail))
 
         threading.Thread(target=check_deps_thread, daemon=True).start()
@@ -2431,17 +2481,16 @@ class AppGUI:
         # Detectar si es un problema de navegador faltante
         is_browser_missing = any(kw in error_lower for kw in [
             "executable doesn't exist",
-            "executable doesn\\'t exist",
+            "executable doesn\'t exist",
             "browsertype.launch",
             "no such file",
             "not found",
             "error_playwright",
             "is not installed",
             "browser was not found",
+            "playwright install",
+            "chromium-",
         ])
-
-        # Detectar si es un problema de timeout (DLLs o antivirus)
-        is_timeout = "timeout" in error_lower
 
         # Detectar si es un error de DLLs del sistema
         is_dll_error = any(kw in error_lower for kw in [
@@ -2451,19 +2500,20 @@ class AppGUI:
             "msvcp",
             "status_dll_not_found",
             "0xc0000135",
-        ])
+        ]) and not is_browser_missing
 
-        if is_timeout:
-            # Timeout: probablemente DLLs faltantes o antivirus
+        # Detectar si es un problema de timeout (DLLs o antivirus)
+        is_timeout = "timeout" in error_lower and not is_browser_missing
+
+        if is_browser_missing:
+            # Navegador no instalado (máxima prioridad)
             self._show_environment_repair_dialog(
-                "⏱️ Verificación Colgada",
-                "La prueba de arranque del navegador superó el tiempo límite (25 segundos) y fue abortada.\n\n"
-                "Este síntoma ocurre cuando:\n"
-                "• Faltan las librerías 'Microsoft Visual C++ Redistributable' en este Windows.\n"
-                "• Un Antivirus o Windows Defender bloqueó silenciosamente el binario del navegador.\n\n"
-                "¿Qué deseas hacer?",
+                "🌐 Navegador No Encontrado",
+                "SiGCABot necesita el navegador Chromium para funcionar, pero no lo encontró instalado en esta máquina.\n\n"
+                "Pulsa 'Instalar Chromium' para descargarlo e instalarlo automáticamente.\n"
+                "Esto requiere conexión a internet (~120 MB de descarga).",
                 show_install_chromium=True,
-                show_vcredist=True
+                show_vcredist=False
             )
         elif is_dll_error:
             # Error explícito de DLLs
@@ -2475,15 +2525,17 @@ class AppGUI:
                 show_install_chromium=False,
                 show_vcredist=True
             )
-        elif is_browser_missing:
-            # Navegador no instalado
+        elif is_timeout:
+            # Timeout: probablemente DLLs faltantes o antivirus
             self._show_environment_repair_dialog(
-                "🌐 Navegador No Encontrado",
-                "SiGCABot necesita el navegador Chromium para funcionar, pero no lo encontró instalado en esta máquina.\n\n"
-                "Pulsa 'Instalar Chromium' para descargarlo e instalarlo automáticamente.\n"
-                "Esto requiere conexión a internet (~120 MB de descarga).",
+                "⏱️ Verificación Colgada",
+                "La prueba de arranque del navegador superó el tiempo límite (15-25 segundos) y fue abortada.\n\n"
+                "Este síntoma ocurre cuando:\n"
+                "• Faltan las librerías 'Microsoft Visual C++ Redistributable' en este Windows.\n"
+                "• Un Antivirus o Windows Defender bloqueó silenciosamente el binario del navegador.\n\n"
+                "¿Qué deseas hacer?",
                 show_install_chromium=True,
-                show_vcredist=False
+                show_vcredist=True
             )
         else:
             # Error desconocido: ofrecer AMBAS opciones
@@ -2508,13 +2560,33 @@ class AppGUI:
         dialog.resizable(False, False)
         dialog.transient(self.root)
 
-        # Tamaño y centrado
+        # Tamaño y centrado seguro
         dialog_w, dialog_h = 520, 420
-        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (dialog_w // 2)
-        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (dialog_h // 2)
+        self.root.update_idletasks()
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+
+        try:
+            if self.root and self.root.winfo_viewable():
+                px = self.root.winfo_rootx()
+                py = self.root.winfo_rooty()
+                pw = self.root.winfo_width()
+                ph = self.root.winfo_height()
+                if px < -30000 or py < -30000:
+                    raise ValueError
+                x = px + (pw - dialog_w) // 2
+                y = py + (ph - dialog_h) // 2
+            else:
+                raise ValueError
+        except Exception:
+            x = (sw - dialog_w) // 2
+            y = (sh - dialog_h) // 2
+            if x < 0: x = 0
+            if y < 0: y = 0
+
         dialog.geometry(f"{dialog_w}x{dialog_h}+{x}+{y}")
 
-        # Borde exterior de advertencia
+        # Borde exterior de advertencia Hextech
         dialog.configure(highlightbackground=ACCENT_YELLOW, highlightthickness=2)
 
         # Marco interior
@@ -2545,7 +2617,7 @@ class AppGUI:
                             activebackground=color, activeforeground="#010a13", relief=tk.FLAT,
                             cursor="hand2", padx=12, pady=6, command=command)
             btn.pack(side=tk.LEFT, padx=4, expand=True, fill=tk.X)
-            # Hover
+            # Hover Hextech
             btn.bind("<Enter>", lambda e: btn.configure(bg=FG_TEXT, fg=BG_MAIN))
             btn.bind("<Leave>", lambda e: btn.configure(bg=color, fg="#010a13"))
             return btn
@@ -2561,6 +2633,8 @@ class AppGUI:
         close_frame.pack(fill=tk.X, pady=(5, 0))
         make_btn(close_frame, "Cerrar", FG_MUTED, dialog.destroy)
 
+        dialog.deiconify()
+        dialog.lift()
         dialog.grab_set()
         dialog.focus_force()
 
@@ -2778,6 +2852,21 @@ class AppGUI:
             else:
                 logger.error(f"Cancelación FALLÓ (código {exit_code}): {completion_msg}")
                 show_custom_error("Cancelación Fallida", f"La cancelación reportó un fallo:\n\n{completion_msg}")
+
+        # Si la operación falló, verificar si se debió a falta de Chromium o librerías
+        if exit_code != 0:
+            full_output = "\n".join(self.subprocess_output_lines)
+            is_dep_error = any(kw in full_output.lower() for kw in [
+                "executable doesn't exist",
+                "executable doesn\'t exist",
+                "browsertype.launch",
+                "playwright install",
+                "browser was not found",
+                "chromium-",
+            ])
+            if is_dep_error:
+                logger.warning("Fallo en subproceso detectado por falta de navegador o dependencias. Lanzando modal de reparación...")
+                self.root.after(300, lambda: self._handle_dep_check_failure(full_output))
 
     def _terminate_active_subprocess(self, timed_out=False):
         """Detiene de forma forzada el subproceso activo y limpia huérfanos."""
