@@ -333,3 +333,82 @@ def test_save_status_writes_valid_json(tmp_path):
         save_status(data)
 
     assert json.loads(status_file.read_text(encoding="utf-8")) == data
+
+
+# ---------------------------------------------------------------------------
+# Tests para fill_form_field (Estrellas Angular y Campos Dinámicos)
+# ---------------------------------------------------------------------------
+
+def test_fill_form_field_rating_with_title(mock_env):
+    bot = LunchBot()
+    
+    mock_page = MagicMock()
+    mock_container = MagicMock()
+    mock_star_loc = MagicMock()
+    mock_star_loc.count.return_value = 1
+    mock_star_loc.first.is_visible.return_value = True
+    
+    # Simular que el locator por selector devuelve el contenedor y el botón de estrella
+    mock_page.locator.return_value = mock_container
+    mock_container.count.return_value = 1
+    mock_container.nth.return_value = mock_container
+    mock_container.locator.side_effect = lambda sel: mock_star_loc if "button" in sel else MagicMock(count=lambda: 1)
+    
+    res = bot.fill_form_field(mock_page, "¿Te gustó el almuerzo", "rating", "3")
+    assert res is True
+    mock_star_loc.first.click.assert_called_once()
+
+
+def test_fill_form_field_rating_with_index(mock_env):
+    bot = LunchBot()
+    
+    mock_page = MagicMock()
+    mock_container = MagicMock()
+    mock_title_loc = MagicMock(count=lambda: 0)
+    
+    mock_star_btn_1 = MagicMock()
+    mock_star_btn_2 = MagicMock()
+    mock_star_btn_3 = MagicMock()
+    mock_buttons_loc = MagicMock()
+    mock_buttons_loc.count.return_value = 5
+    mock_buttons_loc.nth.side_effect = lambda idx: [mock_star_btn_1, mock_star_btn_2, mock_star_btn_3][idx]
+    
+    mock_page.locator.return_value = mock_container
+    mock_container.count.return_value = 1
+    mock_container.nth.return_value = mock_container
+    
+    def container_locator(sel):
+        if "title^='3 de'" in sel or "title*='3 de 5'" in sel:
+            return mock_title_loc
+        if "rq-star" in sel or "radiogroup" in sel:
+            return mock_buttons_loc
+        return MagicMock(count=lambda: 1)
+        
+    mock_container.locator.side_effect = container_locator
+    
+    res = bot.fill_form_field(mock_page, "¿Te gustó el almuerzo", "rating", "3")
+    assert res is True
+    mock_star_btn_3.click.assert_called_once()
+
+
+def test_fill_form_field_select_with_events(mock_env):
+    bot = LunchBot()
+    
+    mock_page = MagicMock()
+    mock_container = MagicMock()
+    mock_select = MagicMock()
+    mock_select.count.return_value = 1
+    mock_select.is_visible.return_value = True
+    mock_select.evaluate.return_value = "select"
+    
+    mock_page.locator.return_value = mock_container
+    mock_container.count.return_value = 1
+    mock_container.nth.return_value = mock_container
+    mock_container.locator.return_value = mock_select
+    mock_select.first = mock_select
+    
+    res = bot.fill_form_field(mock_page, "Ubicación", "select", "Sede ExCle")
+    assert res is True
+    mock_select.select_option.assert_called_with(label="Sede ExCle")
+    assert mock_select.dispatch_event.call_count >= 1
+

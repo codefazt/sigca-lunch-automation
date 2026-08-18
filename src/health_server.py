@@ -373,14 +373,30 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
 
         # Buscar última imagen en evidence/
         evidence_dir = os.path.join(BASE_DIR, "evidence")
-        img_html = "<div style='color: #a09b8c; padding: 40px; text-align: center; border: 2px dashed #1e2328; border-radius: 8px; background-color: #050c14;'>Sin capturas disponibles</div>"
+        img_html = "<div style='color: #a09b8c; padding: 60px 20px; text-align: center; border: 2px dashed #1e2328; border-radius: 8px; background-color: #050c14;'><span style='font-size: 2rem; display: block; margin-bottom: 10px;'>📷</span>Sin capturas de evidencia disponibles</div>"
         last_img = "N/A"
+        has_image = False
         if os.path.exists(evidence_dir):
             files = [f for f in os.listdir(evidence_dir) if f.endswith(".png")]
             if files:
                 files.sort(key=lambda x: os.path.getmtime(os.path.join(evidence_dir, x)), reverse=True)
                 last_img = files[0]
-                img_html = f"<img src='/evidence?name={last_img}' alt='Última Evidencia' class='img-fluid shadow'>"
+                has_image = True
+                img_html = f"""
+                <div class="evidence-container">
+                    <div class="evidence-toolbar">
+                        <span class="evidence-filename">📄 {last_img}</span>
+                        <div class="evidence-actions">
+                            <a href="/evidence?name={last_img}" target="_blank" class="btn-tool" title="Abrir imagen original en pestaña nueva">↗ Abrir Original</a>
+                            <button type="button" class="btn-tool btn-zoom" onclick="openLightbox('/evidence?name={last_img}')" title="Ver en pantalla completa con zoom">🔍 Pantalla Completa</button>
+                        </div>
+                    </div>
+                    <div class="evidence-preview-wrapper" onclick="openLightbox('/evidence?name={last_img}')" title="Haz clic para ampliar">
+                        <img src='/evidence?name={last_img}' alt='Última Evidencia' class='img-fluid shadow evidence-img'>
+                        <div class="evidence-overlay"><span>🔍 Clic para ampliar en alta resolución</span></div>
+                    </div>
+                </div>
+                """
 
         # Leer logs recientes
         log_path = os.path.join(BASE_DIR, "logs", "lunch_automation.log")
@@ -388,7 +404,7 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
         if os.path.exists(log_path):
             try:
                 with open(log_path, "r", encoding="utf-8") as f:
-                    log_lines = f.readlines()[-20:]
+                    log_lines = f.readlines()[-25:]
                     log_content = "".join(log_lines)
             except Exception:
                 pass
@@ -398,65 +414,417 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
         service_status_text = "Activo" if status_data.get("is_active", True) else "Pausado manualmente"
         if last_run_status == 'success':
             status_color = '#0acbe6'
+            status_icon = '✅'
         elif last_run_status in ('skipped', 'dry_run_success'):
-            status_color = '#785a28'
+            status_color = '#c8aa6e'
+            status_icon = '⚡'
         else:
             status_color = '#c83232'
+            status_icon = '❌'
 
         html_page = f"""<!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <title>SiGCA Lunch Bot - Health Check</title>
+    <title>SiGCA Lunch Bot - Health Check & Dashboard</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        body {{ background-color: #010a13; color: #f0e6d2; font-family: 'Outfit', sans-serif; margin: 0; padding: 20px; }}
-        .container {{ max-width: 1100px; margin: 0 auto; }}
-        h1 {{ color: #c8aa6e; font-weight: 800; margin-bottom: 5px; }}
-        .card {{ background-color: #091428; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #1e2328; }}
-        .grid {{ display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }}
-        @media (max-width: 768px) {{ .grid {{ grid-template-columns: 1fr; }} }}
-        .badge {{ padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 0.95rem; }}
-        .badge-success {{ background-color: #0acbe6; color: #010a13; }}
-        .badge-danger {{ background-color: #c83232; color: #ffffff; }}
-        .img-fluid {{ max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #1e2328; }}
-        pre {{ background-color: #050c14; padding: 15px; border-radius: 8px; overflow-x: auto; color: #0acbe6; font-family: Consolas, monospace; font-size: 0.85rem; max-height: 350px; white-space: pre-wrap; }}
-        .title-wrapper {{ display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #1e2328; padding-bottom: 15px; margin-bottom: 20px; }}
-        strong {{ color: #f0e6d2; }}
+        * {{ box-sizing: border-box; }}
+        body {{
+            background-color: #010a13;
+            color: #f0e6d2;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            margin: 0;
+            padding: 24px;
+            line-height: 1.5;
+        }}
+        .container {{
+            max-width: 1480px;
+            margin: 0 auto;
+        }}
+        .header {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+            border-bottom: 2px solid #1e2328;
+            padding-bottom: 20px;
+            margin-bottom: 24px;
+        }}
+        .header h1 {{
+            color: #c8aa6e;
+            font-weight: 800;
+            font-size: 1.9rem;
+            margin: 0 0 4px 0;
+            letter-spacing: -0.5px;
+        }}
+        .header p {{
+            color: #a09b8c;
+            margin: 0;
+            font-size: 0.95rem;
+        }}
+        .header-actions {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }}
+        .badge {{
+            padding: 8px 18px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }}
+        .badge-success {{
+            background-color: #0acbe6;
+            color: #010a13;
+            box-shadow: 0 0 15px rgba(10, 203, 230, 0.25);
+        }}
+        .badge-danger {{
+            background-color: #c83232;
+            color: #ffffff;
+            box-shadow: 0 0 15px rgba(200, 50, 50, 0.25);
+        }}
+        .btn-header {{
+            background-color: #091428;
+            border: 1px solid #1e2328;
+            color: #c8aa6e;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }}
+        .btn-header:hover {{
+            background-color: #005a82;
+            color: #f0e6d2;
+            border-color: #0acbe6;
+        }}
+
+        /* Grid principal */
+        .dashboard-grid {{
+            display: grid;
+            grid-template-columns: minmax(360px, 480px) 1fr;
+            gap: 24px;
+            align-items: start;
+        }}
+        @media (max-width: 1024px) {{
+            .dashboard-grid {{
+                grid-template-columns: 1fr;
+            }}
+        }}
+
+        .card {{
+            background-color: #091428;
+            border-radius: 14px;
+            padding: 22px;
+            margin-bottom: 24px;
+            border: 1px solid #1e2328;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            transition: border-color 0.2s ease;
+        }}
+        .card:hover {{
+            border-color: #2b3a4a;
+        }}
+        .card h2 {{
+            color: #c8aa6e;
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-top: 0;
+            margin-bottom: 16px;
+            border-bottom: 1px solid #1e2328;
+            padding-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        .status-list {{
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }}
+        .status-item {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #0d1b2a;
+            font-size: 0.95rem;
+        }}
+        .status-item:last-child {{
+            border-bottom: none;
+        }}
+        .status-label {{
+            color: #a09b8c;
+            font-weight: 500;
+        }}
+        .status-value {{
+            color: #f0e6d2;
+            font-weight: 600;
+        }}
+
+        /* Consola de logs */
+        pre.logs-box {{
+            background-color: #050c14;
+            padding: 16px;
+            border-radius: 10px;
+            border: 1px solid #1e2328;
+            overflow-x: auto;
+            color: #0acbe6;
+            font-family: 'JetBrains Mono', Consolas, monospace;
+            font-size: 0.8rem;
+            line-height: 1.45;
+            max-height: 480px;
+            white-space: pre-wrap;
+            margin: 0;
+        }}
+
+        /* Contenedor de Evidencia Ampliada */
+        .evidence-card {{
+            display: flex;
+            flex-direction: column;
+        }}
+        .evidence-container {{
+            background-color: #050c14;
+            border: 1px solid #1e2328;
+            border-radius: 10px;
+            overflow: hidden;
+        }}
+        .evidence-toolbar {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 12px 16px;
+            background-color: #07101c;
+            border-bottom: 1px solid #1e2328;
+        }}
+        .evidence-filename {{
+            color: #a09b8c;
+            font-size: 0.85rem;
+            font-family: 'JetBrains Mono', monospace;
+            word-break: break-all;
+        }}
+        .evidence-actions {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        .btn-tool {{
+            background-color: #091428;
+            border: 1px solid #1e2328;
+            color: #f0e6d2;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }}
+        .btn-tool:hover {{
+            background-color: #005a82;
+            border-color: #0acbe6;
+            color: #ffffff;
+        }}
+        .evidence-preview-wrapper {{
+            position: relative;
+            cursor: zoom-in;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #02070d;
+            padding: 10px;
+            min-height: 520px;
+        }}
+        .evidence-img {{
+            width: 100%;
+            height: auto;
+            max-height: 780px;
+            object-fit: contain;
+            border-radius: 6px;
+            transition: transform 0.2s ease;
+        }}
+        .evidence-overlay {{
+            position: absolute;
+            bottom: 20px;
+            background-color: rgba(9, 20, 40, 0.88);
+            color: #0acbe6;
+            border: 1px solid #0acbe6;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            pointer-events: none;
+            backdrop-filter: blur(4px);
+            opacity: 0.9;
+            transition: opacity 0.2s;
+        }}
+        .evidence-preview-wrapper:hover .evidence-overlay {{
+            opacity: 1;
+            background-color: rgba(0, 90, 130, 0.95);
+            color: #ffffff;
+        }}
+
+        /* Lightbox Modal de Pantalla Completa */
+        .lightbox-modal {{
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            left: 0;
+            top: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(1, 10, 19, 0.94);
+            backdrop-filter: blur(8px);
+            overflow: auto;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .lightbox-modal.active {{
+            display: flex;
+        }}
+        .lightbox-content-wrapper {{
+            position: relative;
+            max-width: 95vw;
+            max-height: 95vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }}
+        .lightbox-img {{
+            max-width: 95vw;
+            max-height: 88vh;
+            object-fit: contain;
+            border-radius: 8px;
+            border: 2px solid #0acbe6;
+            box-shadow: 0 0 40px rgba(10, 203, 230, 0.3);
+        }}
+        .lightbox-header {{
+            position: absolute;
+            top: -45px;
+            right: 0;
+            display: flex;
+            gap: 12px;
+        }}
+        .btn-close-lightbox {{
+            background: #c83232;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }}
+        .btn-close-lightbox:hover {{
+            opacity: 0.85;
+        }}
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="title-wrapper">
+        <header class="header">
             <div>
                 <h1>SiGCA Lunch Bot Dashboard</h1>
-                <small style="color: #a09b8c;">Health Check Web en vivo — Hextech Client</small>
+                <p>Health Check Web en vivo — Hextech Client v{APP_VERSION}</p>
             </div>
-            <div>{active_badge}</div>
-        </div>
-        <div class="grid">
-            <div>
-                <div class="card">
-                    <h2 style="color: #c8aa6e; margin-top:0; border-bottom: 1px solid #1e2328; padding-bottom: 8px;">Estado General</h2>
-                     <p><strong>Estatus:</strong> {service_status_text}</p>
-                    <p><strong>Última Ejecución:</strong> {last_run_ts}</p>
-                    <p><strong>Último Resultado:</strong> <span style="color: {status_color}">{last_run_status.upper()}</span></p>
-                </div>
-                <div class="card">
-                    <h2 style="color: #0acbe6; margin-top:0; border-bottom: 1px solid #1e2328; padding-bottom: 8px;">Logs Recientes</h2>
-                    <pre>{log_content}</pre>
-                </div>
+            <div class="header-actions">
+                {active_badge}
+                <a href="/manual" class="btn-header">📖 Manual</a>
+                <button type="button" class="btn-header" onclick="location.reload()">🔄 Refrescar</button>
             </div>
-            <div>
+        </header>
+
+        <main class="dashboard-grid">
+            <!-- Columna Izquierda: Estado y Logs -->
+            <section>
                 <div class="card">
-                    <h2 style="color: #c8aa6e; margin-top:0; border-bottom: 1px solid #1e2328; padding-bottom: 8px;">Última Captura de Evidencia</h2>
-                    <p style="color: #a09b8c; font-size: 0.9rem;">Archivo: {last_img}</p>
+                    <h2>📊 Estado General</h2>
+                    <ul class="status-list">
+                        <li class="status-item">
+                            <span class="status-label">Estatus del Servicio:</span>
+                            <span class="status-value">{service_status_text}</span>
+                        </li>
+                        <li class="status-item">
+                            <span class="status-label">Última Ejecución:</span>
+                            <span class="status-value">{last_run_ts}</span>
+                        </li>
+                        <li class="status-item">
+                            <span class="status-label">Último Resultado:</span>
+                            <span class="status-value" style="color: {status_color};">{status_icon} {last_run_status.upper()}</span>
+                        </li>
+                        <li class="status-item">
+                            <span class="status-label">Versión de SiGCABot:</span>
+                            <span class="status-value">v{APP_VERSION}</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h2>💻 Logs Recientes</h2>
+                    <pre class="logs-box">{log_content}</pre>
+                </div>
+            </section>
+
+            <!-- Columna Derecha: Gran Visor de Evidencia -->
+            <section>
+                <div class="card evidence-card">
+                    <h2>📸 Última Captura de Evidencia</h2>
                     {img_html}
                 </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Lightbox Modal para Visualización en Alta Resolución -->
+    <div id="lightboxModal" class="lightbox-modal" onclick="closeLightbox(event)">
+        <div class="lightbox-content-wrapper" onclick="event.stopPropagation()">
+            <div class="lightbox-header">
+                <a id="lightboxDownloadBtn" href="#" target="_blank" class="btn-tool" style="background:#091428; border-color:#0acbe6; color:#0acbe6;">↗ Abrir Pestaña</a>
+                <button type="button" class="btn-close-lightbox" onclick="closeLightbox()">✕ Cerrar (Esc)</button>
             </div>
+            <img id="lightboxImg" src="" alt="Evidencia Ampliada" class="lightbox-img">
         </div>
     </div>
+
+    <script>
+        function openLightbox(src) {{
+            const modal = document.getElementById('lightboxModal');
+            const img = document.getElementById('lightboxImg');
+            const downloadBtn = document.getElementById('lightboxDownloadBtn');
+            img.src = src;
+            downloadBtn.href = src;
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }}
+
+        function closeLightbox(e) {{
+            const modal = document.getElementById('lightboxModal');
+            modal.classList.remove('active');
+            document.body.style.overflow = 'auto';
+        }}
+
+        document.addEventListener('keydown', function(e) {{
+            if (e.key === 'Escape') {{
+                closeLightbox();
+            }}
+        }});
+    </script>
 </body>
 </html>"""
         self.wfile.write(html_page.encode("utf-8"))

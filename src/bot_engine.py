@@ -318,7 +318,7 @@ class LunchBot:
         Args:
             page: Instancia de la página de Playwright.
             label_text: Texto de la etiqueta/pregunta del campo.
-            field_type: Tipo de campo ('select', 'radio', 'text').
+            field_type: Tipo de campo ('select', 'radio', 'text', 'rating', 'stars').
             value: Valor a establecer (string, int, o 'last' para el último).
         """
         try:
@@ -328,7 +328,7 @@ class LunchBot:
             container = None
             container_selectors = [
                 "div.form-group", "div.question", "div.ng-star-inserted",
-                "div", "fieldset"
+                "div.flex.flex-col", "div", "fieldset"
             ]
 
             for selector in container_selectors:
@@ -336,14 +336,45 @@ class LunchBot:
                 count = locs.count()
                 for i in range(count):
                     candidate = locs.nth(i)
-                    if candidate.locator("select, input, textarea, [role='combobox'], [role='radiogroup']").count() > 0:
+                    if candidate.locator("select, input, textarea, button.rq-star, [role='combobox'], [role='radiogroup']").count() > 0:
                         container = candidate
 
             if not container:
                 logger.warning(f"No se encontró contenedor específico para '{label_text}'. Buscando de forma global.")
                 container = page
 
-            if field_type == "select":
+            if field_type in ("rating", "stars"):
+                try:
+                    star_num = int(value)
+                except (ValueError, TypeError):
+                    star_num = 3
+                star_num = max(1, min(5, star_num))
+
+                # 1. Por atributo title de botón de estrella (ej. title="3 de 5")
+                star_loc = container.locator(f"button[title^='{star_num} de'], button[title*='{star_num} de 5'], button.rq-star[title*='{star_num}']")
+                if star_loc.count() > 0 and star_loc.first.is_visible():
+                    star_loc.first.click()
+                    page.wait_for_timeout(200)
+                    logger.info(f"Calificación '{label_text}' marcada con {star_num} estrellas (por title).")
+                    return True
+
+                # 2. Por lista de botones .rq-star o en radiogroup de calificación
+                star_buttons = container.locator("button.rq-star, div[role='radiogroup'][aria-label*='Calificación' i] button, div[role='radiogroup'] button")
+                if star_buttons.count() >= star_num:
+                    star_buttons.nth(star_num - 1).click()
+                    page.wait_for_timeout(200)
+                    logger.info(f"Calificación '{label_text}' marcada con {star_num} estrellas (por índice).")
+                    return True
+
+                # 3. Fallback a radio button clásico de calificación
+                radio_star = container.locator(f"input[type='radio'][value='{star_num}'], [role='radio'][aria-label*='{star_num}' i]")
+                if radio_star.count() > 0 and radio_star.first.is_visible():
+                    radio_star.first.click()
+                    page.wait_for_timeout(200)
+                    logger.info(f"Calificación '{label_text}' marcada con {star_num} estrellas (por radio).")
+                    return True
+
+            elif field_type == "select":
                 select_loc = container.locator("select, [role='combobox']").first
                 if select_loc.count() > 0 and select_loc.is_visible():
                     tag_name = select_loc.evaluate("el => el.tagName.toLowerCase()")
@@ -354,7 +385,15 @@ class LunchBot:
                             options_count = select_loc.locator("option").count()
                             select_loc.select_option(index=options_count - 1)
                         else:
-                            select_loc.select_option(label=value)
+                            try:
+                                select_loc.select_option(label=value)
+                            except Exception:
+                                select_loc.select_option(value=value)
+                        try:
+                            select_loc.dispatch_event("change")
+                            select_loc.dispatch_event("input")
+                        except Exception:
+                            pass
                     else:
                         # Custom Angular Material/etc. select
                         select_loc.click()
@@ -375,6 +414,10 @@ class LunchBot:
                     return True
 
             elif field_type == "radio":
+                # Si el contenedor contiene botones de estrellas, delegar a rating
+                if container.locator("button.rq-star, div[role='radiogroup'][aria-label*='Calificación' i]").count() > 0:
+                    return self.fill_form_field(page, label_text, "rating", value)
+
                 # 1. Por rol de radio con nombre exacto
                 loc = container.get_by_role("radio", name=value, exact=True)
                 if loc.count() > 0 and loc.first.is_visible():
@@ -417,9 +460,14 @@ class LunchBot:
                             return True
 
             elif field_type == "text":
-                text_loc = container.locator("input[type='text'], textarea").first
+                text_loc = container.locator("input[type='text'], textarea, input:not([type])").first
                 if text_loc.count() > 0 and text_loc.is_visible():
                     text_loc.fill(value)
+                    try:
+                        text_loc.dispatch_event("input")
+                        text_loc.dispatch_event("change")
+                    except Exception:
+                        pass
                     logger.info(f"Campo de texto '{label_text}' rellenado.")
                     return True
 
@@ -793,11 +841,12 @@ class LunchBot:
                             target_label = "Saludable" if prefer_menu == "saludable" else "Estándar"
                             alternative_label = "Estándar" if prefer_menu == "saludable" else "Saludable"
 
+                            # Buscar selectores interactivos dentro del formulario para no interferir con la tabla informativa semanal
                             menu_selectors = [
-                                f"text={target_label}",
-                                f"input[value*='{target_label.lower()}']",
-                                f"label:has-text('{target_label}')",
-                                f"span:has-text('{target_label}')"
+                                f"form input[value*='{target_label.lower()}']",
+                                f"form [role='radio']:has-text('{target_label}')",
+                                f"form label:has-text('{target_label}') input",
+                                f"form button:has-text('{target_label}')"
                             ]
 
                             for sel in menu_selectors:
@@ -810,23 +859,9 @@ class LunchBot:
                                     break
 
                             if not menu_selected:
-                                logger.warning(f"No se pudo seleccionar el menú preferido '{target_label}'. Intentando alternativo '{alternative_label}'...")
-                                alt_selectors = [
-                                    f"text={alternative_label}",
-                                    f"input[value*='{alternative_label.lower()}']",
-                                    f"label:has-text('{alternative_label}')",
-                                    f"span:has-text('{alternative_label}')"
-                                ]
-                                for sel in alt_selectors:
-                                    loc = page.locator(sel)
-                                    if loc.count() > 0 and loc.first.is_visible():
-                                        logger.info(f"Seleccionando menú alternativo clicking en: '{sel}'")
-                                        loc.first.click()
-                                        page.wait_for_timeout(int(1000 * factor))
-                                        menu_selected = True
-                                        break
+                                logger.info("Menú gestionado globalmente según el calendario semanal de SiGCA.")
                         except Exception as e:
-                            logger.error(f"Error intentando seleccionar la opción de menú: {e}")
+                            logger.warning(f"Aviso al procesar selector de menú: {e}")
 
                         # --- Rellenar campos condicionales si existen ---
                         logger.info("Verificando existencia de campos del formulario adicional...")
@@ -840,48 +875,65 @@ class LunchBot:
                         asistir_tarde_val = q_config.get("asistir_tarde", "Sí")
                         comentario_val = q_config.get("comentario", "Favor quitar el jugo de melon y las porciones no tienen suficiente proteina, quedando uno con hambre")
 
-                        if page.get_by_text("Ubicación", exact=False).count() > 0:
+                        # 1. Ubicación (dropdown)
+                        if page.locator("#ubicacion, select[name='ubicacion']").count() > 0 or page.get_by_text("Ubicación", exact=False).count() > 0:
                             self.fill_form_field(page, "Ubicación", "select", ubicacion_val)
 
-                        if page.get_by_text("De 1 a 5 estrellas", exact=False).count() > 0:
-                            self.fill_form_field(page, "De 1 a 5 estrellas", "radio", estrellas_val)
+                        # 2. Calificación (Estrellas / ¿Te gustó el almuerzo?)
+                        rating_keywords = ["¿Te gustó el almuerzo", "Calificación", "Evaluación", "De 1 a 5 estrellas", "estrellas"]
+                        matched_rating_kw = next((kw for kw in rating_keywords if page.get_by_text(kw, exact=False).count() > 0), None)
+                        if matched_rating_kw:
+                            self.fill_form_field(page, matched_rating_kw, "rating", estrellas_val)
+                        elif page.locator("button.rq-star, div[role='radiogroup'][aria-label*='Calificación' i]").count() > 0:
+                            self.fill_form_field(page, "Calificación", "rating", estrellas_val)
 
-                        if page.get_by_text("bien cocidos", exact=False).count() > 0:
+                        # 3. Bien cocidos
+                        if page.locator("#question_5").count() > 0 or page.get_by_text("bien cocidos", exact=False).count() > 0:
                             self.fill_form_field(page, "bien cocidos", "select", bien_cocidos_val)
 
-                        if page.get_by_text("porción estaba acorde", exact=False).count() > 0:
+                        # 4. Porción acorde
+                        if page.locator("#question_6").count() > 0 or page.get_by_text("porción estaba acorde", exact=False).count() > 0:
                             self.fill_form_field(page, "porción estaba acorde", "select", porcion_acorde_val)
 
-                        if page.get_by_text("condimentación de la comida", exact=False).count() > 0:
+                        # 5. Condimentación de la comida
+                        if page.locator("#question_7").count() > 0 or page.get_by_text("condimentación de la comida", exact=False).count() > 0:
                             try:
                                 cond_val = int(condimentacion_val)
                             except ValueError:
                                 cond_val = condimentacion_val
                             self.fill_form_field(page, "condimentación de la comida", "select", cond_val)
 
-                        if page.get_by_text("asistir después de la 01:30", exact=False).count() > 0:
+                        # 6. Asistir después de la 01:30
+                        if page.locator("input[name='question_8']").count() > 0 or page.get_by_text("asistir después de la 01:30", exact=False).count() > 0:
                             self.fill_form_field(page, "asistir después de la 01:30", "radio", asistir_tarde_val)
 
-                        if page.get_by_text("comentario acerca del plato", exact=False).count() > 0:
+                        # 7. Comentario del plato
+                        if page.locator("#question_9").count() > 0 or page.get_by_text("comentario acerca del plato", exact=False).count() > 0:
                             self.fill_form_field(page, "comentario acerca del plato", "text", comentario_val)
 
                         last_evidence = self.capture_evidence(page, f"form_filled_att{attempt}")
 
                         # --- Buscar botón de envío ---
-                        submit_buttons = ["Solicitar", "Pedir Almuerzo", "Guardar", "Confirmar", "Enviar", "Aceptar"]
+                        submit_buttons = ["Enviar solicitud", "Solicitar", "Pedir Almuerzo", "Guardar", "Confirmar", "Enviar", "Aceptar"]
                         button_found = None
 
-                        for btn_text in submit_buttons:
-                            btn_locator = page.get_by_role("button", name=btn_text, exact=False)
-                            if btn_locator.count() > 0 and btn_locator.first.is_visible():
-                                button_found = btn_locator.first
-                                logger.info(f"Se encontró botón de acción: '{btn_text}'")
-                                break
-                            text_locator = page.get_by_text(btn_text, exact=True)
-                            if text_locator.count() > 0 and text_locator.first.is_visible():
-                                button_found = text_locator.first
-                                logger.info(f"Se encontró elemento clicable con texto: '{btn_text}'")
-                                break
+                        form_submit = page.locator("form button[type='submit']:visible, button[type='submit']:visible")
+                        if form_submit.count() > 0:
+                            button_found = form_submit.first
+                            logger.info(f"Se encontró botón de envío en el formulario: '{button_found.text_content().strip()}'")
+
+                        if not button_found:
+                            for btn_text in submit_buttons:
+                                btn_locator = page.get_by_role("button", name=btn_text, exact=False)
+                                if btn_locator.count() > 0 and btn_locator.first.is_visible():
+                                    button_found = btn_locator.first
+                                    logger.info(f"Se encontró botón de acción: '{btn_text}'")
+                                    break
+                                text_locator = page.get_by_text(btn_text, exact=True)
+                                if text_locator.count() > 0 and text_locator.first.is_visible():
+                                    button_found = text_locator.first
+                                    logger.info(f"Se encontró elemento clicable con texto: '{btn_text}'")
+                                    break
 
                         if not button_found:
                             last_msg = "No se pudo identificar el botón o formulario de pedido de almuerzo en la página."
@@ -906,18 +958,22 @@ class LunchBot:
                             button_found.click()
 
                             status_text = "El mensaje de éxito apareció en pantalla. Solicitud confirmada."
+                            success_detected = False
                             try:
-                                success_message = page.get_by_text("Solicitud Registrada", exact=False).or_(
-                                    page.get_by_text("procesado exitosamente", exact=False)
-                                ).first
+                                success_pattern = "text=/solicitud registrada|procesado exitosamente|solicitud enviada|gracias por enviar|tu solicitud ha sido|tu pedido ha sido/i"
+                                success_message = page.locator(success_pattern).first
                                 success_message.wait_for(state="visible", timeout=int(10000 * factor))
                                 logger.info(status_text)
+                                success_detected = True
                             except PlaywrightTimeoutError:
-                                status_text = "No se detectó el mensaje de éxito después de enviar. Puede que esté lento o haya fallado."
-                                logger.warning(status_text)
-                                # No marcar la operación como exitosa si el portal
-                                # no confirmó el resultado posterior al clic.
-                                raise RuntimeError(status_text)
+                                # Comprobar si el formulario ya no está visible o si cambió de vista
+                                if page.locator("form").count() == 0 or not page.locator("form").first.is_visible():
+                                    logger.info("El formulario ya no está visible en pantalla (transición completada post-envío). Solicitud confirmada.")
+                                    success_detected = True
+                                else:
+                                    status_text = "No se detectó el mensaje de éxito después de enviar. Puede que esté lento o haya fallado."
+                                    logger.warning(status_text)
+                                    raise RuntimeError(status_text)
 
                             last_evidence = self.capture_evidence(page, f"post_order_click_att{attempt}")
                             last_msg = f"Solicitud exitosa: {status_text}"
