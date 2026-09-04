@@ -22,7 +22,7 @@ from datetime import datetime, time
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
-from src.config import BASE_DIR, ENV_PATH, CONFIG_PATH, load_status, load_config, get_target_lunch_date, DIAS_SEMANA_MAP
+from src.config import BASE_DIR, ENV_PATH, CONFIG_PATH, load_status, load_config, get_target_lunch_date, DIAS_SEMANA_MAP, is_bot_active
 from src.job_lock import acquire_job_lock
 from src import notifications
 
@@ -631,6 +631,11 @@ class LunchBot:
         try:
             if not is_manual:
                 status_data = load_status()
+                if not is_bot_active(status_data, self.config):
+                    msg = "El bot está desactivado ('is_active': False). Deteniendo ejecución de solicitud."
+                    logger.warning(msg)
+                    return 0, msg, None
+
                 if status_data.get("is_cancelled_today", False):
                     msg = "El bot está inactivo hoy porque el almuerzo fue cancelado."
                     logger.warning(msg)

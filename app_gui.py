@@ -49,7 +49,7 @@ _args = _parse_args()
 
 if _args.run_job or _args.cancel_order or _args.check_deps:
     # Importar módulos de infraestructura
-    from src.config import BASE_DIR, load_status, save_status
+    from src.config import BASE_DIR, load_status, save_status, is_bot_active, load_config
     from src.logger import logger
     from src.bot_engine import LunchBot, is_confirmed_order_result
     from datetime import datetime
@@ -74,9 +74,10 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
         logger.info("Iniciando ejecución de LunchBot en modo CLI (--run-job)...")
         try:
             status_info = load_status()
+            cli_config = load_config()
             
-            # 1. Si el bot está inactivo en status.json y no es una ejecución forzada, no hacer nada.
-            if not status_info.get("is_active", True) and not _args.force_time:
+            # 1. Si el bot está inactivo en status.json o config.json y no es una ejecución manual, no hacer nada.
+            if not is_bot_active(status_info, cli_config) and not _args.manual:
                 logger.warning("El bot está desactivado ('is_active': False). Deteniendo ejecución en segundo plano.")
                 sys.exit(0)
 
@@ -189,7 +190,7 @@ if _args.run_job or _args.cancel_order or _args.check_deps:
 # Modo GUI (por defecto): Interfaz gráfica de escritorio
 # ---------------------------------------------------------------------------
 
-from src.config import BASE_DIR, load_env_dict, save_env_values, load_config, save_config, get_asset_path, set_startup, check_and_repair_startup, BG_MAIN, BG_CARD, BG_INPUT, FG_TEXT, FG_MUTED, ACCENT, ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW, ACCENT_BLUE, load_status, save_status, APP_VERSION, get_target_lunch_date
+from src.config import BASE_DIR, load_env_dict, save_env_values, load_config, save_config, get_asset_path, set_startup, check_and_repair_startup, BG_MAIN, BG_CARD, BG_INPUT, FG_TEXT, FG_MUTED, ACCENT, ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW, ACCENT_BLUE, load_status, save_status, APP_VERSION, get_target_lunch_date, is_bot_active
 from src.logger import logger, gui_log_handler
 from src.bot_engine import LunchBot, kill_playwright_orphans
 from src.health_server import start_http_server
@@ -255,7 +256,8 @@ def _update_gui_status_badge_sync():
     if not app:
         return
     status_info = load_status()
-    is_act = status_info.get("is_active", True)
+    cfg = load_config()
+    is_act = is_bot_active(status_info, cfg)
     init_text = "SISTEMA ACTIVO" if is_act else "SISTEMA INACTIVO"
     init_color = ACCENT_GREEN if is_act else ACCENT_RED
     init_line_color = ACCENT_GREEN if is_act else ACCENT_RED
@@ -1872,9 +1874,23 @@ class AppGUI:
 
     def toggle_bot_state(self):
         status_info = load_status()
-        is_act = not status_info.get("is_active", True)
+        cfg = load_config()
+        current_active = is_bot_active(status_info, cfg)
+        is_act = not current_active
         status_info["is_active"] = is_act
         save_status(status_info)
+
+        # Sincronizar en config.json si existen los campos
+        config_changed = False
+        if "is_active" in cfg:
+            cfg["is_active"] = is_act
+            config_changed = True
+        if "active" in cfg:
+            cfg["active"] = is_act
+            config_changed = True
+        if config_changed:
+            save_config(cfg)
+
         update_gui_status_badge()
 
         try:
@@ -2239,10 +2255,12 @@ class AppGUI:
                 logger.error(f"Error al verificar rango horario al registrar tarea: {e}")
                 in_range = False
 
-            if in_range:
+            bot_active = is_bot_active()
+
+            if in_range and bot_active:
                 detail_msg = (
                     f"{msg}\n\n"
-                    "Dado que actualmente te encuentras dentro del rango horario de solicitud, "
+                    "Dado que actualmente te encuentras dentro del rango horario de solicitud y el bot está activo, "
                     "el bot iniciará una petición en segundo plano en este momento para asegurar tu almuerzo."
                 )
                 show_custom_success("Tarea Registrada (En Rango)", detail_msg)
@@ -2251,6 +2269,13 @@ class AppGUI:
                     "manual",
                     "Ejecutando primera solicitud tras registrar la tarea programada..."
                 ))
+            elif in_range and not bot_active:
+                detail_msg = (
+                    f"{msg}\n\n"
+                    "Actualmente te encuentras dentro del rango horario de solicitud, pero el bot está DESACTIVADO (Pausado).\n\n"
+                    "No se realizará ninguna solicitud automática hasta que actives el bot desde el panel principal."
+                )
+                show_custom_success("Tarea Registrada (Bot Inactivo)", detail_msg)
             else:
                 detail_msg = (
                     f"{msg}\n\n"
@@ -2991,15 +3016,26 @@ def main():
         _gui_single_instance_socket.bind(("127.0.0.1", 18294)) # Usamos 18294 exclusivo para la GUI
     except socket.error:
         # El puerto ya está en uso, significa que ya hay otra GUI abierta
-        root = tk.Tk()
-        root.withdraw()
-        dialog = PremiumMessageBox(
-            root,
-            "SiGCABot Activo",
-            "Ya hay una instancia de SiGCABot ejecutándose en tu sistema.\n\nPor favor, revisa el área de notificaciones (System Tray) al lado de tu reloj.",
-            "warning"
+        warn_msg = (
+            "Ya hay una instancia de SiGCABot ejecutándose en tu sistema (puerto 18294 ocupado).\n"
+            "Revisa el área de notificaciones (System Tray) al lado de tu reloj o ciérrala antes de abrir una nueva."
         )
-        root.wait_window(dialog)
+        logger.warning(warn_msg)
+        print(f"\n[ADVERTENCIA] {warn_msg}\n")
+
+        # Si corre desde consola interactiva, salir de inmediato sin bloquear la terminal
+        is_console = sys.stdin and hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
+        if not is_console:
+            try:
+                import ctypes
+                ctypes.windll.user32.MessageBoxW(
+                    0,
+                    warn_msg,
+                    "SiGCABot Activo",
+                    0x30  # MB_ICONWARNING | MB_OK
+                )
+            except Exception:
+                pass
         sys.exit(0)
 
     # Levantar servicios en hilos secundarios

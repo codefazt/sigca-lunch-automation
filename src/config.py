@@ -17,7 +17,7 @@ import base64
 logger = logging.getLogger("SiGCABot")
 
 # Versión global de la aplicación
-APP_VERSION = "2.7.1"
+APP_VERSION = "2.7.2"
 
 # ---------------------------------------------------------------------------
 # Ofuscación / Encriptación simple de campos sensibles
@@ -366,6 +366,28 @@ def save_config(data):
             json.dump(data, f, indent=2, ensure_ascii=False)
     except Exception as e:
         logger.error(f"Error al guardar config.json: {e}")
+
+
+def is_bot_active(status_info=None, config=None):
+    """
+    Determina si el bot está activo consultando status.json y config.json.
+    Retorna False si cualquiera de los dos archivos lo define como inactivo.
+    """
+    if status_info is None:
+        status_info = load_status()
+    if not status_info.get("is_active", True):
+        return False
+
+    if config is None:
+        config = load_config()
+    if "is_active" in config and not config.get("is_active", True):
+        return False
+    if "active" in config and not config.get("active", True):
+        return False
+
+    return True
+
+
 
 # ---------------------------------------------------------------------------
 # Funciones de Persistencia — .env

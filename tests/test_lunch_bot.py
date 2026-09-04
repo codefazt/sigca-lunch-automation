@@ -412,3 +412,53 @@ def test_fill_form_field_select_with_events(mock_env):
     mock_select.select_option.assert_called_with(label="Sede ExCle")
     assert mock_select.dispatch_event.call_count >= 1
 
+
+# ---------------------------------------------------------------------------
+# Tests para Comprobación de Estado Inactivo (is_bot_active y run_automation)
+# ---------------------------------------------------------------------------
+
+def test_is_bot_active_matrix():
+    from src.config import is_bot_active
+
+    # 1. Ambos activos por defecto
+    assert is_bot_active({"is_active": True}, {}) is True
+
+    # 2. Inactivo en status.json
+    assert is_bot_active({"is_active": False}, {}) is False
+    assert is_bot_active({"is_active": False}, {"is_active": True}) is False
+
+    # 3. Inactivo en config.json con "is_active"
+    assert is_bot_active({"is_active": True}, {"is_active": False}) is False
+
+    # 4. Inactivo en config.json con "active"
+    assert is_bot_active({"is_active": True}, {"active": False}) is False
+
+    # 5. Ambos activos explícitos
+    assert is_bot_active({"is_active": True}, {"is_active": True, "active": True}) is True
+
+
+def test_run_automation_aborts_when_bot_inactive(mock_env):
+    bot = LunchBot()
+
+    with patch("src.bot_engine.load_status", return_value={"is_active": False}):
+        with patch("src.bot_engine.is_bot_active", return_value=False):
+            with patch("src.bot_engine.sync_playwright") as mock_pw:
+                code, msg, evidence = bot.run_automation(dry_run=False, is_manual=False)
+                assert code == 0
+                assert "desactivado" in msg.lower() or "inactivo" in msg.lower()
+                assert evidence is None
+                mock_pw.assert_not_called()
+
+
+def test_run_automation_manual_ignores_inactive(mock_env):
+    bot = LunchBot()
+
+    # Si is_manual=True, debe ignorar la inactividad y continuar (se detiene en horario o browser)
+    with patch("src.bot_engine.load_status", return_value={"is_active": False}):
+        with patch("src.bot_engine.is_bot_active", return_value=False):
+            with patch.object(bot, "is_time_valid", return_value=False):
+                # Al ser manual, no aborta por is_bot_active pero se detiene en validación horaria si no es dry_run
+                code, msg, evidence = bot.run_automation(dry_run=False, is_manual=True)
+                assert "horario" in msg.lower()
+
+

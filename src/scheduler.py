@@ -15,7 +15,7 @@ import subprocess
 import base64
 from datetime import datetime
 
-from src.config import BASE_DIR, load_status, save_status, load_config, get_target_lunch_date
+from src.config import BASE_DIR, load_status, save_status, load_config, get_target_lunch_date, is_bot_active
 from src import state
 
 logger = logging.getLogger("SiGCABot")
@@ -132,9 +132,9 @@ def start_scheduler(gui_update_callback=None):
                     logger.error(f"Error durante la limpieza automática semanal: {e}")
             # -----------------------------------
 
-            if status_info.get("is_active", True) and not status_info.get("is_cancelled_today", False):
+            config = load_config()
+            if is_bot_active(status_info, config) and not status_info.get("is_cancelled_today", False):
                 # Calcular la fecha del almuerzo objetivo para este ciclo operativo
-                config = load_config()
                 target_date, target_day_name = get_target_lunch_date(config=config)
                 target_date_str = target_date.strftime("%Y-%m-%d")
 
